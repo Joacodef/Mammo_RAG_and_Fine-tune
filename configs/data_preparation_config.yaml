@@ -1,0 +1,17 @@
+data:
+  # A single base seed used to initialize the random number generator.
+  # Each sample will be generated using `base_seed + sample_number`.
+  base_seed: 42
+
+  # The number of distinct training samples to generate for each partition size.
+  n_samples: 5
+
+  # Path to the input raw data file, relative to the project root.
+  input_file: 'data/raw/all.jsonl'
+
+  # Directory where the generated data samples will be stored.
+  output_dir: 'data/processed'
+
+  # A list of training set sizes to generate. The special value "all"
+  # will create samples using the entire dataset.
+  partition_sizes: [5, 10, 20, 30, 50, 100, 200, "all"]
