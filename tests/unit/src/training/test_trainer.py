@@ -166,3 +166,57 @@ def test_save_model(mock_makedirs, mock_exists, mock_model, mock_datamodule, moc
     # Verify that the save methods were called correctly
     mock_model.model.save_pretrained.assert_called_once_with(output_dir)
     mock_datamodule.tokenizer.save_pretrained.assert_called_once_with(output_dir)
+
+
+# Fixture for a datamodule with an empty dataloader
+@pytest.fixture
+def mock_datamodule_empty():
+    """Creates a mock data module with an empty dataloader."""
+    datamodule = MagicMock()
+    
+    # Create a mock loader that is empty
+    mock_loader = MagicMock()
+    mock_loader.__iter__.return_value = iter([])
+    mock_loader.__len__.return_value = 0
+    
+    datamodule.train_dataloader.return_value = mock_loader
+    
+    return datamodule
+
+# Test case for training with an empty dataloader
+def test_train_with_empty_dataloader(mock_model, mock_datamodule_empty, mock_config):
+    """
+    Tests that the training loop handles an empty dataloader gracefully
+    and does not perform any training steps.
+    """
+    trainer = Trainer(model=mock_model, datamodule=mock_datamodule_empty, config=mock_config)
+    
+    # Mock the optimizer and scheduler to check if they are called
+    optimizer = MagicMock()
+    scheduler = MagicMock()
+    trainer._create_optimizer = MagicMock(return_value=optimizer)
+    trainer._create_scheduler = MagicMock(return_value=scheduler)
+
+    # Run the training process
+    trainer.train()
+
+    # Assert that no training steps were taken
+    optimizer.step.assert_not_called()
+    scheduler.step.assert_not_called()
+
+# Test case for gradient clipping
+@patch('torch.nn.utils.clip_grad_norm_')
+def test_gradient_clipping_is_called(mock_clip_grad_norm, mock_model, mock_datamodule, mock_config):
+    """
+    Tests that gradient clipping is called during the training loop.
+    """
+    trainer = Trainer(model=mock_model, datamodule=mock_datamodule, config=mock_config)
+
+    # Run the training process for one step
+    trainer.train()
+
+    # Assert that clip_grad_norm_ was called once
+    mock_clip_grad_norm.assert_called_once()
+    
+    # Assert that it was called with the model's parameters and a clipping value of 1.0
+    mock_clip_grad_norm.assert_called_with(mock_model.parameters(), 1.0)

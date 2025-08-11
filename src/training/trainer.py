@@ -29,6 +29,11 @@ class Trainer:
         Executes the full training loop for the model.
         """
         train_dataloader = self.datamodule.train_dataloader()
+
+        # Handle an empty dataloader
+        if len(train_dataloader) == 0:
+            print("Warning: The training dataloader is empty. Skipping training.")
+            return
         
         # Prepare optimizer and scheduler
         optimizer = self._create_optimizer()
@@ -95,6 +100,10 @@ class Trainer:
 
     def _create_scheduler(self, optimizer, total_steps):
         """Creates and returns the learning rate scheduler."""
+        # Handle case where there are no steps
+        if total_steps == 0:
+            return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+
         warmup_steps = int(total_steps * self.config['trainer']['warmup_ratio'])
         return get_linear_schedule_with_warmup(
             optimizer,
