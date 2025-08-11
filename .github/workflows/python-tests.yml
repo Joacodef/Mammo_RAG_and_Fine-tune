@@ -1,3 +1,5 @@
+# .github/workflows/python-tests.yml
+
 # A descriptive name for the workflow, which will appear in the GitHub Actions tab.
 name: Python Tests
 
@@ -40,8 +42,7 @@ jobs:
           pip install -r requirements.txt
 
       # Step 4: Run the tests.
-      # This command executes pytest, which will automatically discover
-      # and run all files matching the 'test_*.py' pattern in the repository.
+      # This command executes pytest as a module to ensure it is found by the Python interpreter.
       - name: Run pytest
         run: |
-          pytest
+          python -m pytest
