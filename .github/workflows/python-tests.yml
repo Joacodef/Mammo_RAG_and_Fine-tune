@@ -1,0 +1,47 @@
+# A descriptive name for the workflow, which will appear in the GitHub Actions tab.
+name: Python Tests
+
+# Specifies the events that trigger this workflow.
+on:
+  # Run the workflow on every push to the 'main' branch.
+  push:
+    branches: [ "main" ]
+  # Also run on every pull request that targets the 'main' branch.
+  pull_request:
+    branches: [ "main" ]
+
+# Defines the jobs that will run as part of the workflow.
+jobs:
+  # A single job in this workflow, named 'test'.
+  test:
+    # Specifies the type of virtual machine to run the job on. 'ubuntu-latest' is a standard choice.
+    runs-on: ubuntu-latest
+
+    # A sequence of tasks that will be executed as part of the 'test' job.
+    steps:
+      # Step 1: Check out the repository's code into the runner.
+      # This action allows the workflow to access your source code and test files.
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up the Python environment.
+      # This action installs a specific version of Python on the runner.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          # Use Python version 3.11, as specified in the project's README.
+          python-version: "3.11"
+
+      # Step 3: Install project dependencies.
+      # This runs shell commands to install the required packages.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Step 4: Run the tests.
+      # This command executes pytest, which will automatically discover
+      # and run all files matching the 'test_*.py' pattern in the repository.
+      - name: Run pytest
+        run: |
+          pytest
