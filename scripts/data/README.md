@@ -1,23 +1,26 @@
-
 # Data Generation Scripts
 
 ## Overview
 
-This directory contains scripts for preparing and sampling data for experiments. The primary script is `generate_partitions.py`, which is designed to create multiple, reproducible training samples of various sizes from a raw dataset.
+This directory contains scripts for preparing and sampling data for experiments. The primary script is `generate_partitions.py`, which is designed to create a consistent, stratified holdout test set and multiple, reproducible training samples of various sizes from a single raw dataset.
 
 ## Script: `generate_partitions.py`
 
 ### Purpose
 
-This script automates the creation of training data subsets. It reads a single raw `.jsonl` file and generates a structured output of smaller datasets, which is essential for evaluating model performance at different data scales. The process is controlled entirely by a YAML configuration file to ensure reproducibility.
+This script automates the creation of data partitions for robust model evaluation. It performs two key functions:
+1.  **Global Test Set Creation**: It first splits the entire raw dataset into a global training set and a holdout test set using multi-label stratification. This ensures that all models, regardless of the training data size, are evaluated against the same, representative test data.
+2.  **Stratified Training Samples**: From the global training set, it generates multiple, smaller training partitions of various sizes (e.g., 5, 10, 50 reports). This is essential for evaluating model performance at different data scales.
+
+The entire process is controlled by a single YAML configuration file to ensure reproducibility.
 
 ### Workflow
 
 The data generation process follows these steps:
 
-1.  **Provide Raw Data**: Before running the script, place your full, labeled dataset in the `data/raw/` directory. The script expects this file to be named `train.jsonl`.
+1.  **Provide Raw Data**: Before running the script, place your full, labeled dataset in the `data/raw/` directory. The script expects the file to be named `all.jsonl` by default, but this can be changed in the configuration file.
 
-2.  **Expected Data Format**: The input file must be in the **JSON Lines (`.jsonl`)** format, where each line is a self-contained, valid JSON object. Each object should contain at least a `"text"` key and an `"entities"` key. The script is also designed to automatically remove the optional `"Comments"` key if it exists.
+2.  **Expected Data Format**: The input file must be in the **JSON Lines (`.jsonl`)** format, where each line is a self-contained, valid JSON object. Each object must contain a `"text"` key and an `"entities"` key. The script will automatically remove the optional `"Comments"` key if it exists.
 
     **Example of a single line (JSON object):**
 
@@ -34,35 +37,42 @@ The data generation process follows these steps:
     }
     ```
 
-3.  **Configure Data Generation**: The script's behavior is controlled by `configs/data_config.yaml`. Open this file to define the parameters for sampling.
+3.  **Configure Data Generation**: The script's behavior is controlled by `configs/data_preparation_config.yaml`. Open this file to define the parameters for splitting and sampling.
 
-    **Example `configs/data_config.yaml`:**
+    **Example `configs/data_preparation_config.yaml`:**
 
     ```yaml
     data:
       base_seed: 42
       n_samples: 5
-      input_file: 'data/raw/train.jsonl'
-      output_dir: 'data/processed'
+      test_split_ratio: 0.2
+      raw_input_file: 'data/raw/all.jsonl'
+      partitions_dir: 'data/processed'
+      holdout_test_set_path: 'data/processed/test.jsonl'
       partition_sizes: [5, 10, 20, 50, 100, "all"]
     ```
 
 4.  **Execute the Script**: Run the script from the **root directory** of the project, providing the path to the configuration file.
 
     ```bash
-    python scripts/data/generate_partitions.py --config-path configs/data_config.yaml
+    python scripts/data/generate_partitions.py --config-path configs/data_preparation_config.yaml
     ```
 
-5.  **Review the Output**: The script will generate a nested directory structure within the specified `output_dir` (`data/processed/`). For each partition size, it will create a directory containing subdirectories for each sample.
+5.  **Review the Output**: The script will generate a holdout test file and a nested directory structure within the specified `partitions_dir` (`data/processed/`). The script will also print a label distribution report for the global train and test sets to the console.
 
     **Example Output Structure:**
 
     ```
     data/processed/
-    └── train-50/
+    ├── test.jsonl              # Global holdout test set
+    ├── train-50/
+    │   ├── sample-1/
+    │   │   └── train.jsonl
+    │   ├── sample-2/
+    │   │   └── train.jsonl
+    │   └── ...
+    └── train-100/
         ├── sample-1/
-        │   └── train.jsonl
-        ├── sample-2/
         │   └── train.jsonl
         └── ...
     ```
