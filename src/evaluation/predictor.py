@@ -1,90 +1,87 @@
+# src/evaluation/predictor.py
 import torch
 from tqdm import tqdm
 import numpy as np
 
-from src.models.bert_ner import BertNerModel
-from src.data_loader.ner_datamodule import NERDataModule
-
 class Predictor:
     """
     Handles loading a trained model and running inference on a test dataset.
+    This class is designed to be task-agnostic (NER or RE).
     """
 
-    def __init__(self, model_path, config):
+    def __init__(self, model, device):
         """
         Initializes the Predictor.
 
         Args:
-            model_path (str): The path to the directory containing the saved model.
-            config (dict): The evaluation configuration dictionary.
+            model (torch.nn.Module): The trained model instance (e.g., BertNerModel or REModel).
+            device (torch.device): The device to run inference on ('cuda' or 'cpu').
         """
-        self.model_path = model_path
-        self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # The number of labels needs to be known before loading the model.
-        # This information is typically stored in the model's config.json.
-        # For simplicity, we can reconstruct it from our evaluation config.
-        # A more robust solution might load config.json from the model_path.
-        n_labels = len(self._get_label_map_from_config())
-        
-        self.model = BertNerModel(base_model=model_path, n_labels=n_labels)
+        self.model = model
+        self.device = device
         self.model.to(self.device)
         self.model.eval()
 
-    def _get_label_map_from_config(self):
-        """Helper to reconstruct the label map."""
-        # This is a simplified stand-in for loading the model's actual config
-        # or having a more sophisticated config management.
-        entity_labels = self.config.get('entity_labels', ["FIND", "REG", "OBS", "GANGLIOS"]) # Fallback
-        label_map = {"O": 0}
-        for label in entity_labels:
-            label_map[f"B-{label}"] = len(label_map)
-            label_map[f"I-{label}"] = len(label_map)
-        return label_map
-
-    def predict(self, test_dataloader):
+    def predict(self, test_dataloader, task_type):
         """
         Runs inference on the provided dataloader.
 
         Args:
             test_dataloader (DataLoader): The DataLoader for the test set.
+            task_type (str): The type of task, either 'ner' or 're'. This determines
+                             how predictions are handled.
 
         Returns:
             tuple: A tuple containing:
-                - all_predictions (list): A list of predicted label sequences.
-                - all_true_labels (list): A list of ground-truth label sequences.
+                - all_predictions (list): A list of predicted label sequences/IDs.
+                - all_true_labels (list): A list of ground-truth label sequences/IDs.
         """
         all_predictions = []
         all_true_labels = []
 
-        progress_bar = tqdm(test_dataloader, desc="Evaluating")
+        progress_bar = tqdm(test_dataloader, desc=f"Evaluating for {task_type.upper()}")
         
         with torch.no_grad():
             for batch in progress_bar:
+                # Move batch to the correct device
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['labels'].to(self.device)
+                labels = batch['labels' if task_type == 'ner' else 'label'].to(self.device)
 
-                outputs = self.model(input_ids, attention_mask=attention_mask)
+                # Forward pass
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels
+                )
                 
-                # Get the most likely token class prediction
-                predictions = torch.argmax(outputs.logits, dim=2)
+                # Get the most likely class prediction
+                logits = outputs.logits
+                if task_type == 'ner':
+                    # For NER, predictions are per-token
+                    predictions = torch.argmax(logits, dim=2)
+                else: # RE
+                    # For RE, predictions are per-sequence
+                    predictions = torch.argmax(logits, dim=1)
 
                 # Move data back to CPU for evaluation
                 predictions = predictions.detach().cpu().numpy()
                 true_labels = labels.detach().cpu().numpy()
 
-                # Align predictions and labels, ignoring padding
-                for i in range(len(true_labels)):
-                    pred_labels_i = []
-                    true_labels_i = []
-                    for j in range(len(true_labels[i])):
-                        if true_labels[i][j] != -100: # -100 is often used to ignore tokens in loss
-                            pred_labels_i.append(predictions[i][j])
-                            true_labels_i.append(true_labels[i][j])
-                    
-                    all_predictions.append(pred_labels_i)
-                    all_true_labels.append(true_labels_i)
+                if task_type == 'ner':
+                    # Align predictions and labels for NER, ignoring padding
+                    for i in range(len(true_labels)):
+                        pred_labels_i = []
+                        true_labels_i = []
+                        for j in range(len(true_labels[i])):
+                            if true_labels[i][j] != -100: # Ignore padded tokens
+                                pred_labels_i.append(predictions[i][j])
+                                true_labels_i.append(true_labels[i][j])
+                        all_predictions.append(pred_labels_i)
+                        all_true_labels.append(true_labels_i)
+                else: # RE
+                    # For RE, labels are simpler (one per instance)
+                    all_predictions.extend(predictions)
+                    all_true_labels.extend(true_labels)
 
         return all_predictions, all_true_labels
