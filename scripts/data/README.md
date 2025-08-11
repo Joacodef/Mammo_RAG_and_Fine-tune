@@ -22,18 +22,24 @@ The data generation process follows these steps:
 
 2.  **Expected Data Format**: The input file must be in the **JSON Lines (`.jsonl`)** format, where each line is a self-contained, valid JSON object. Each object must contain a `"text"` key and an `"entities"` key. The script will automatically remove the optional `"Comments"` key if it exists.
 
-    **Example of a single line (JSON object):**
+    **Example of a single line in spanish (JSON object):**
 
     ```json
     {
-      "id": 123,
-      "text": "Report content...",
+      "id": "1.2.840.113619.2.373.202306131802469930109650",
+      "text": "Ambas mamas son densas y heterogéneas.\nMicrocalcificaciones aisladas.\nNódulo periareolar derecho bien delimitadp de 10mm.\nNódulo calcifcado derecho.\nNo observo microcalcificaciones sospechosas agrupadas ni imágenes espiculadas.\nRegiones axilares sin adenopatías.\nImpresión: Mamas densas y nódulo derecho presuntamente benigno.\nSugiero ecografía mamaria.\nBI-RADS 3 ACR C",
+      "Comments": [],
       "entities": [
-        {"id": 0, "start_offset": 12, "end_offset": 29, "label": "FIND"},
-        {"id": 1, "start_offset": 36, "end_offset": 48, "label": "REG"}
+        {"id": 4762, "label": "DENS", "start_offset": 0, "end_offset": 37},
+        {"id": 4763, "label": "HALL_presente", "start_offset": 39, "end_offset": 59},
+        {"id": 4765, "label": "HALL_presente", "start_offset": 70, "end_offset": 76},
+        {"id": 4769, "label": "HALL_presente", "start_offset": 289, "end_offset": 295}
       ],
-      "relations": [],
-      "Comments": "This is an optional comment that will be removed."
+      "relations": [
+        {"id": 22, "from_id": 4764, "to_id": 4763, "type": "describir"},
+        {"id": 29, "from_id": 4770, "to_id": 4765, "type": "ubicar"},
+        {"id": 5254, "from_id": 13447, "to_id": 13446, "type": "ubicar"}
+      ]
     }
     ```
 
