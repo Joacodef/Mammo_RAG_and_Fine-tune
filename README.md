@@ -94,4 +94,4 @@ This project's experiments rely on training data samples of various sizes, which
 
 **For detailed instructions on how to configure and run the data generation script, please see the dedicated documentation:**
 
-➡️ **[Data Generation README](https://www.google.com/search?q=./scripts/data/README.md)**
+➡️ **[Data Generation README](./scripts/data/README.md)**
