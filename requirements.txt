@@ -16,3 +16,4 @@ pyyaml
 pandas
 scikit-learn
 tqdm
+seqeval
