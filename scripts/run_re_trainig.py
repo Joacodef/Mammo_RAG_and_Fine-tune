@@ -12,73 +12,90 @@ from src.data_loader.re_datamodule import REDataModule
 from src.models.re_model import REModel
 from src.training.trainer import Trainer
 
-def run_re_training(config_path):
+def run_batch_re_training(config_path, partition_dir):
     """
-    Main function to run the training process for a Relation Extraction experiment.
+    Main function to run the RE training process for all samples in a partition directory.
 
     Args:
         config_path (str): Path to the RE training YAML configuration file.
+        partition_dir (str): Path to the directory containing training samples
+                             (e.g., 'data/processed/train-50').
     """
-    # Load configuration from YAML file
+    # --- 1. Load Configuration and Find Samples ---
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    train_file_path = config['paths']['train_file']
+    base_partition_dir = Path(partition_dir)
+    sample_dirs = sorted([d for d in base_partition_dir.iterdir() if d.is_dir() and d.name.startswith('sample-')])
 
-    # Set the seed for reproducibility
-    torch.manual_seed(config['seed'])
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(config['seed'])
+    if not sample_dirs:
+        print(f"Warning: No sample directories found in '{partition_dir}'. Exiting.")
+        return
 
-    # --- 1. Initialize Data Module for RE ---
-    print(f"Loading RE data from: {train_file_path}")
-    datamodule = REDataModule(config=config, train_file=train_file_path)
-    datamodule.setup()
-    
-    # Dynamically determine the number of relation labels
-    n_labels = len(datamodule.relation_map)
-    print(f"Number of relation labels in the dataset: {n_labels}")
+    print(f"Found {len(sample_dirs)} samples to process for RE training in '{base_partition_dir.name}'.")
 
-    # --- 2. Initialize Model for RE ---
-    print(f"Initializing RE model: {config['model']['base_model']}")
-    # The RE model requires the tokenizer to be passed for resizing token embeddings
-    model = REModel(
-        base_model=config['model']['base_model'],
-        n_labels=n_labels,
-        tokenizer=datamodule.tokenizer
-    )
+    # --- 2. Loop Through Each Sample and Train a Model ---
+    for sample_dir in sample_dirs:
+        train_file_path = sample_dir / "train.jsonl"
+        if not train_file_path.exists():
+            print(f"  - Skipping {sample_dir.name}: 'train.jsonl' not found.")
+            continue
 
-    # --- 3. Initialize Trainer ---
-    print("Initializing trainer...")
-    # The generic Trainer class can be reused
-    trainer = Trainer(
-        model=model,
-        datamodule=datamodule,
-        config=config
-    )
+        print(f"\n{'='*20} Starting RE Training for: {sample_dir.name} {'='*20}")
 
-    # --- 4. Start Training ---
-    trainer.train()
+        # Set the seed for reproducibility for each run
+        torch.manual_seed(config['seed'])
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(config['seed'])
 
-    # --- 5. Save the final model ---
-    # Create a unique output directory for this RE run
-    # Example: output/models_re/bert-base-cased/train-50/sample-1
-    base_output_dir = Path(config['paths']['output_dir'])
-    model_name = config['model']['base_model'].replace("/", "_")
-    data_partition_name = Path(train_file_path).parent.parent.name
-    sample_name = Path(train_file_path).parent.name
-    
-    final_output_dir = base_output_dir / model_name / data_partition_name / sample_name
-    final_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    print(f"\nSaving final RE model to: {final_output_dir}")
-    trainer.save_model(final_output_dir)
-    
-    print("\nRE experiment finished successfully.")
+        # --- Initialize Data Module for RE ---
+        print(f"Loading RE data from: {train_file_path}")
+        datamodule = REDataModule(config=config, train_file=train_file_path)
+        datamodule.setup()
+        
+        n_labels = len(datamodule.relation_map)
+        print(f"Number of relation labels in the dataset: {n_labels}")
+
+        # --- Initialize Model for RE ---
+        print(f"Initializing RE model: {config['model']['base_model']}")
+        model = REModel(
+            base_model=config['model']['base_model'],
+            n_labels=n_labels,
+            tokenizer=datamodule.tokenizer
+        )
+
+        # --- Initialize Trainer ---
+        print("Initializing trainer...")
+        trainer = Trainer(
+            model=model,
+            datamodule=datamodule,
+            config=config
+        )
+
+        # --- Start Training ---
+        trainer.train()
+
+        # --- Save the final model ---
+        base_output_dir = Path(config['paths']['output_dir'])
+        model_name = config['model']['base_model'].replace("/", "_")
+        data_partition_name = base_partition_dir.name
+        sample_name = sample_dir.name
+        
+        final_output_dir = base_output_dir / model_name / data_partition_name / sample_name
+        final_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"\nSaving final RE model to: {final_output_dir}")
+        trainer.save_model(final_output_dir)
+        
+        print(f"\n{'='*20} Finished RE Training for: {sample_dir.name} {'='*20}")
+
+    print("\nAll RE training experiments finished successfully.")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Run a training experiment for Relation Extraction.")
+    parser = argparse.ArgumentParser(
+        description="Run a batch of Relation Extraction training experiments for all samples within a given data partition."
+    )
     
     parser.add_argument(
         '--config-path', 
@@ -86,7 +103,14 @@ if __name__ == '__main__':
         required=True, 
         help='Path to the YAML configuration file for RE training.'
     )
+
+    parser.add_argument(
+        '--partition-dir',
+        type=str,
+        required=True,
+        help="Path to the directory containing the training samples (e.g., 'data/processed/train-50')."
+    )
     
     args = parser.parse_args()
     
-    run_re_training(args.config_path)
+    run_batch_re_training(args.config_path, args.partition_dir)

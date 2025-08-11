@@ -32,9 +32,9 @@ model:
 
 # Paths and directories
 paths:
-  # Path to the training data file, relative to the project root.
-  # This path should point to a specific generated sample, e.g.,
-  # 'data/processed/train-50/sample-1/train.jsonl'
+  # Path to a training data file, relative to the project root.
+  # NOTE: This path is IGNORED when using the batch training script,
+  # as it dynamically finds the training files in the --partition-dir.
   train_file: 'data/processed/train-50/sample-1/train.jsonl'
 
   # Directory where the final trained model and associated files will be saved.
