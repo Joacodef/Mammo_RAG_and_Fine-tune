@@ -27,11 +27,11 @@ def convert_numpy_types(obj):
         return {k: convert_numpy_types(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [convert_numpy_types(i) for i in obj]
-    elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
-                        np.int16, np.int32, np.int64, np.uint8,
-                        np.uint16, np.uint32, np.uint64)):
+    elif isinstance(obj, (np.integer, np.intc, np.intp, np.int8,
+                    np.int16, np.int32, np.int64, np.uint8,
+                    np.uint16, np.uint32, np.uint64)):
         return int(obj)
-    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+    elif isinstance(obj, (np.floating, np.float16, np.float32, np.float64)):
         return float(obj)
     elif isinstance(obj, (np.ndarray,)):
         return obj.tolist()
