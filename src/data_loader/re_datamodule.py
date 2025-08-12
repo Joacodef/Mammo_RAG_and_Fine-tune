@@ -127,7 +127,11 @@ class REDataModule:
         self.train_file = train_file
         self.test_file = test_file
         
-        model_path = config.get('model', {}).get('base_model')
+        # Check for model_path during evaluation, fall back to base_model for training
+        model_path = config.get('model_path') or config.get('model', {}).get('base_model')
+        if not model_path:
+            raise ValueError("Could not find 'model_path' or 'model.base_model' in the configuration.")
+
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self._add_special_tokens()
         
