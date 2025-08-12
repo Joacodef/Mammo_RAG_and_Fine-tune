@@ -76,6 +76,10 @@ class NERDataset(Dataset):
         word_ids = self.tokenizer(self.tokenizer.decode(input_ids, skip_special_tokens=True), add_special_tokens=False).word_ids()
 
         for entity in entities:
+            # Check for the entity itself
+            if not isinstance(entity, dict):
+                raise TypeError(f"Entity must be a dictionary, but got: {type(entity)}")
+
             entity_label = entity["label"]
             if f"B-{entity_label}" not in self.label_map:
                 if entity_label not in self.warned_entities:
@@ -84,22 +88,43 @@ class NERDataset(Dataset):
                 continue
 
             start_char, end_char = entity["start_offset"], entity["end_offset"]
+
+            # Validate offset types
+            if not isinstance(start_char, int) or not isinstance(end_char, int):
+                raise TypeError(
+                    f"Entity offsets must be integers. "
+                    f"Got start_offset: {start_char} (type {type(start_char)}) and "
+                    f"end_offset: {end_char} (type {type(end_char)})."
+                )
+
+            # Check for inverted offsets
+            if start_char >= end_char:
+                continue
+                
             start_token_idx, end_token_idx = -1, -1
 
-            for i, (start, end) in enumerate(self.tokenizer(self.tokenizer.decode(input_ids, skip_special_tokens=True)).encodings[0].offsets):
+            # This part of the logic can be optimized, but for now, we'll keep it as is.
+            # A single call to the tokenizer would be more efficient.
+            token_offsets = self.tokenizer(
+                self.tokenizer.decode(input_ids, skip_special_tokens=True)
+            ).encodings[0].offsets
+
+            for i, (start, end) in enumerate(token_offsets):
                 if start <= start_char < end:
                     start_token_idx = i
                 if start < end_char <= end:
                     end_token_idx = i
-                    break
+                    break # Exit after finding the end token
             
             if start_token_idx != -1 and end_token_idx != -1:
+                # Assign B-tag to the first token of the entity
                 labels[start_token_idx + 1] = self.label_map[f"B-{entity_label}"]
+                # Assign I-tags to subsequent tokens of the same entity
                 for i in range(start_token_idx + 2, end_token_idx + 2):
-                    if labels[i] == -100:
+                    if labels[i] == -100: # Ensure we don't overwrite existing labels
                         labels[i] = self.label_map[f"I-{entity_label}"]
         
-        # Set non-entity tokens to 0 ("O" tag)
+        # Set all other tokens to 'O'
         labels[labels == -100] = 0
         return labels
 

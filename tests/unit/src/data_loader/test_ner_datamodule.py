@@ -266,3 +266,95 @@ def test_dataset_with_malformed_json(malformed_jsonl_file, mock_tokenizer):
     # The error should be raised during the initialization of the dataset
     with pytest.raises(json.JSONDecodeError):
         _ = NERDataset(file_path=str(malformed_jsonl_file), tokenizer=mock_tokenizer, label_map={})
+
+
+@pytest.fixture
+def invalid_entities_file(tmp_path):
+    """Creates a .jsonl file with an entity that is not a dictionary."""
+    data = [
+        {"text": "Report one with a finding.", "entities": ["not_a_dictionary"]}
+    ]
+    file_path = tmp_path / "invalid_entities.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for record in data:
+            f.write(json.dumps(record) + '\n')
+    return file_path
+
+@pytest.fixture
+def missing_entity_key_file(tmp_path):
+    """Creates a .jsonl file with an entity missing a required key."""
+    data = [
+        {"text": "Report one with a finding.", "entities": [{"start_offset": 18, "end_offset": 25}]}
+    ]
+    file_path = tmp_path / "missing_entity_key.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for record in data:
+            f.write(json.dumps(record) + '\n')
+    return file_path
+
+@pytest.fixture
+def invalid_offset_type_file(tmp_path):
+    """Creates a .jsonl file with a non-integer offset."""
+    data = [
+        {"text": "Report one with a finding.", "entities": [{"label": "FIND", "start_offset": "18", "end_offset": 25}]}
+    ]
+    file_path = tmp_path / "invalid_offset_type.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for record in data:
+            f.write(json.dumps(record) + '\n')
+    return file_path
+
+@pytest.fixture
+def inverted_offset_file(tmp_path):
+    """Creates a .jsonl file with start_offset > end_offset."""
+    data = [
+        {"text": "Report one with a finding.", "entities": [{"label": "FIND", "start_offset": 25, "end_offset": 18}]}
+    ]
+    file_path = tmp_path / "inverted_offset.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for record in data:
+            f.write(json.dumps(record) + '\n')
+    return file_path
+
+
+def test_dataset_with_invalid_entities_type(invalid_entities_file, mock_tokenizer):
+    """
+    Tests that a TypeError is raised if an entity is not a dictionary.
+    """
+    dataset = NERDataset(file_path=str(invalid_entities_file), tokenizer=mock_tokenizer, label_map={})
+
+    with pytest.raises(TypeError):
+        _ = dataset[0]
+
+def test_dataset_with_missing_entity_key(missing_entity_key_file, mock_tokenizer):
+    """
+    Tests that a KeyError is raised if an entity is missing a required key.
+    """
+    dataset = NERDataset(file_path=str(missing_entity_key_file), tokenizer=mock_tokenizer, label_map={})
+
+    with pytest.raises(KeyError):
+        _ = dataset[0]
+
+def test_dataset_with_invalid_offset_type(invalid_offset_type_file, mock_tokenizer):
+    """
+    Tests that a TypeError is raised if an offset is not an integer.
+    """
+    # Provide a label_map that includes the entity from the test file
+    label_map = {"O": 0, "B-FIND": 1, "I-FIND": 2}
+    dataset = NERDataset(file_path=str(invalid_offset_type_file), tokenizer=mock_tokenizer, label_map=label_map)
+
+    with pytest.raises(TypeError):
+        _ = dataset[0]
+
+def test_dataset_with_inverted_offsets(inverted_offset_file, mock_tokenizer):
+    """
+    Tests that no error is raised but the label is not applied if start_offset > end_offset.
+    """
+    label_map = {"O": 0, "B-FIND": 1, "I-FIND": 2}
+    dataset = NERDataset(file_path=str(inverted_offset_file), tokenizer=mock_tokenizer, label_map=label_map)
+
+    item = dataset[0]
+    labels = item['labels']
+
+    # All labels should be 0 ('O') since the inverted offsets should be ignored.
+    assert torch.all(labels == 0)
