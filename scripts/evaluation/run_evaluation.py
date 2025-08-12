@@ -5,8 +5,11 @@ from pathlib import Path
 import json
 import torch
 import numpy as np
+from collections import defaultdict
 from seqeval.metrics import classification_report as ner_classification_report
 from sklearn.metrics import classification_report as re_classification_report
+from datetime import datetime
+import shutil
 
 # Add the project root to the Python path
 import sys
@@ -37,13 +40,10 @@ def convert_numpy_types(obj):
         return obj.tolist()
     return obj
 
-def run_evaluation(config_path):
+def run_evaluation(config):
     """
     Main function to run evaluation on a test set for either NER or RE.
     """
-    # --- 1. Load Configuration ---
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
 
     task = config.get('task')
     if task not in ['ner', 're']:
@@ -104,19 +104,113 @@ def run_evaluation(config_path):
     
     print(json.dumps(report, indent=4))
     print(f"\nEvaluation metrics saved to: {report_path}")
-    print("\nEvaluation finished successfully.")
+    print(f"\nEvaluation for '{Path(model_path).name}' finished successfully.")
+    return report
+
+
+def aggregate_and_save_metrics(all_reports, output_dir):
+    """
+    Aggregates metrics from multiple reports to calculate mean and standard deviation.
+
+    Args:
+        all_reports (list): A list of classification report dictionaries.
+        output_dir (Path): The directory to save the final summary file.
+    """
+    # Use defaultdict to easily append scores for each metric
+    aggregated_metrics = defaultdict(lambda: defaultdict(list))
+    
+    # --- 1. Collect all scores from all reports ---
+    for report in all_reports:
+        for label, metrics in report.items():
+            # Skip non-dict items like 'accuracy' which is a flat value
+            if isinstance(metrics, dict):
+                aggregated_metrics[label]['precision'].append(metrics.get('precision', 0))
+                aggregated_metrics[label]['recall'].append(metrics.get('recall', 0))
+                aggregated_metrics[label]['f1-score'].append(metrics.get('f1-score', 0))
+
+    # --- 2. Calculate statistics (mean and std) ---
+    summary_report = {}
+    for label, metrics in aggregated_metrics.items():
+        summary_report[label] = {
+            'precision': {
+                'mean': np.mean(metrics['precision']),
+                'std': np.std(metrics['precision'])
+            },
+            'recall': {
+                'mean': np.mean(metrics['recall']),
+                'std': np.std(metrics['recall'])
+            },
+            'f1-score': {
+                'mean': np.mean(metrics['f1-score']),
+                'std': np.std(metrics['f1-score'])
+            }
+        }
+    
+    # --- 3. Save the final aggregated report ---
+    summary_path = output_dir / "evaluation_summary.json"
+    with open(summary_path, 'w') as f:
+        json.dump(summary_report, f, indent=4)
+        
+    print("\n--- Aggregated Evaluation Summary ---")
+    print(json.dumps(summary_report, indent=4))
+    print(f"\nAggregated summary saved to: {summary_path}")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Run evaluation on a trained NER or RE model.")
+    parser = argparse.ArgumentParser(
+        description="Run a batch of evaluations for all models in a given directory."
+    )
     
     parser.add_argument(
         '--config-path', 
         type=str, 
         required=True, 
-        help='Path to the YAML configuration file for evaluation (e.g., `configs/evaluation_ner_config.yaml`).'
+        help='Path to the YAML configuration file for evaluation.'
     )
     
     args = parser.parse_args()
     
-    run_evaluation(args.config_path)
+    # --- 1. Load Base Configuration ---
+    with open(args.config_path, 'r') as f:
+        base_config = yaml.safe_load(f)
+
+    model_dir = Path(base_config['model_dir'])
+    sample_dirs = sorted([d for d in model_dir.iterdir() if d.is_dir() and d.name.startswith('sample-')])
+
+    if not sample_dirs:
+        raise FileNotFoundError(f"No 'sample-*' directories found in '{model_dir}'.")
+
+    # --- 2. Create Dynamic, Timestamped Output Directory ---
+    task = base_config.get('task', 'unknown_task')
+    train_size_folder_name = model_dir.parent.name  # e.g., "train-50"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Define the new unique output directory path
+    output_dir_timestamped = Path(base_config['output_dir']) / train_size_folder_name / timestamp
+    output_dir_timestamped.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Results will be saved in: {output_dir_timestamped}")
+
+    # Save a copy of the evaluation configuration for reproducibility
+    shutil.copy(args.config_path, output_dir_timestamped / "evaluation_config.yaml")
+
+    all_individual_reports = []
+    print(f"Found {len(sample_dirs)} model samples to evaluate in '{model_dir}'.")
+
+    # --- 3. Loop and Evaluate Each Model Sample ---
+    for i, sample_path in enumerate(sample_dirs):
+        print(f"\n{'='*20} Evaluating: {sample_path.name} ({i+1}/{len(sample_dirs)}) {'='*20}")
+        
+        # Create a dynamic config for the current sample, injecting the new output path
+        sample_config = base_config.copy()
+        sample_config['model_path'] = str(sample_path)
+        sample_config['output_dir'] = str(output_dir_timestamped) # Override with timestamped path
+        
+        report = run_evaluation(sample_config)
+        all_individual_reports.append(report)
+
+    # --- 4. Aggregate and Save Final Summary ---
+    if all_individual_reports:
+        aggregate_and_save_metrics(all_individual_reports, output_dir_timestamped)
+
+    print("\nBatch evaluation finished successfully.")

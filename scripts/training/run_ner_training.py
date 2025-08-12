@@ -5,6 +5,8 @@ from pathlib import Path
 import os
 import torch
 import sys
+from datetime import datetime
+import shutil
 
 # Add the project root to the Python path to allow for absolute imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -35,7 +37,20 @@ def run_batch_training(config_path, partition_dir):
 
     print(f"Found {len(sample_dirs)} samples to process in '{base_partition_dir.name}'.")
 
-    # --- 2. Loop Through Each Sample and Train a Model ---
+    # --- 2. Create Timestamped Parent Directory for the Run ---
+    base_output_dir = Path(config['paths']['output_dir'])
+    data_partition_name = base_partition_dir.name
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # This is the unique parent directory for this entire batch training run
+    run_specific_output_dir = base_output_dir / "ner" / data_partition_name / timestamp
+    print(f"All models for this run will be saved in subfolders of: {run_specific_output_dir}")
+
+    # Save a copy of the training configuration for reproducibility
+    shutil.copy(config_path, run_specific_output_dir / "training_config.yaml")
+
+
+    # --- 3. Loop Through Each Sample and Train a Model ---
     for sample_dir in sample_dirs:
         train_file_path = sample_dir / "train.jsonl"
         if not train_file_path.exists():
@@ -76,12 +91,8 @@ def run_batch_training(config_path, partition_dir):
         trainer.train()
 
         # --- Save the final model ---
-        base_output_dir = Path(config['paths']['output_dir'])
-        model_name = config['model']['base_model'].replace("/", "_")
-        data_partition_name = base_partition_dir.name
         sample_name = sample_dir.name
-        
-        final_output_dir = base_output_dir / model_name / data_partition_name / sample_name
+        final_output_dir = run_specific_output_dir / sample_name
         final_output_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"\nSaving final model to: {final_output_dir}")
