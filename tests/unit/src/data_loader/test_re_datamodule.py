@@ -3,6 +3,7 @@ import pytest
 import torch
 import json
 from unittest.mock import MagicMock, patch
+import warnings
 
 # Add the project root to the Python path
 import sys
@@ -73,6 +74,34 @@ def re_jsonl_file(tmp_path):
     with open(file_path, 'w', encoding='utf-8') as f:
         for record in data:
             f.write(json.dumps(record) + '\n')
+    return file_path
+
+# --- Fixtures for Robustness Testing ---
+
+@pytest.fixture
+def invalid_entities_file_re(tmp_path):
+    """Creates a .jsonl file where an entity is not a dictionary."""
+    data = [
+        {"text": "This record has an invalid entity.", "entities": ["not_a_dictionary"]}
+    ]
+    file_path = tmp_path / "invalid_entity.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(data[0]) + '\n')
+    return file_path
+
+@pytest.fixture
+def invalid_relations_file_re(tmp_path):
+    """Creates a .jsonl file where a relation is not a dictionary."""
+    data = [
+        {
+            "text": "This record has an invalid relation.",
+            "entities": [{"id": 1, "label": "HALL", "start_offset": 0, "end_offset": 6}],
+            "relations": ["not_a_dictionary"]
+        }
+    ]
+    file_path = tmp_path / "invalid_relation.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(data[0]) + '\n')
     return file_path
 
 # --- Test Cases for REDataset ---
@@ -203,3 +232,33 @@ def test_redatamodule_setup_and_dataloader_creation(mock_re_config, mock_re_toke
     assert isinstance(train_dl, torch.utils.data.DataLoader)
     assert train_dl.batch_size == mock_re_config['trainer']['batch_size']
     assert next(iter(train_dl)) is not None
+
+# --- Tests for Input Data Robustness ---
+
+def test_redataset_with_invalid_entities_type(invalid_entities_file_re, mock_re_tokenizer, mock_re_config):
+    """
+    Tests that a TypeError is raised if an entity is not a dictionary.
+    """
+    relation_map = {label: i for i, label in enumerate(mock_re_config['model']['relation_labels'])}
+    with pytest.raises(TypeError, match="Entities must be dictionaries"):
+        _ = REDataset(file_path=str(invalid_entities_file_re), tokenizer=mock_re_tokenizer, relation_map=relation_map)
+
+def test_redataset_with_invalid_relations_type(invalid_relations_file_re, mock_re_tokenizer, mock_re_config):
+    """
+    Tests that a TypeError is raised if a relation is not a dictionary.
+    """
+    relation_map = {label: i for i, label in enumerate(mock_re_config['model']['relation_labels'])}
+    with pytest.raises(TypeError, match="Relations must be dictionaries"):
+        _ = REDataset(file_path=str(invalid_relations_file_re), tokenizer=mock_re_tokenizer, relation_map=relation_map)
+
+
+def test_redataset_warns_for_unmapped_relation(re_jsonl_file, mock_re_tokenizer, mock_re_config):
+    """
+    Tests that a warning is issued for relation types not found in the config.
+    """
+    relation_map = {label: i for i, label in enumerate(mock_re_config['model']['relation_labels'])}
+
+    # The re_jsonl_file contains a record with "ignored_relation", which is not in the map.
+    # We expect the dataset initialization to raise a UserWarning.
+    with pytest.warns(UserWarning, match="Relation type 'ignored_relation' not in config and will be ignored."):
+        _ = REDataset(file_path=str(re_jsonl_file), tokenizer=mock_re_tokenizer, relation_map=relation_map)

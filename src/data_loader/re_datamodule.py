@@ -1,9 +1,9 @@
-# src/data_loader/re_datamodule.py
 import json
 import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer
 import itertools
+import warnings
 
 class REDataset(Dataset):
     """
@@ -12,15 +12,17 @@ class REDataset(Dataset):
     possible pair of entities within each record.
     """
 
-    def __init__(self, file_path, tokenizer, relation_map):
+    def __init__(self, file_path, tokenizer, relation_map, warned_relations_set=None):
         """
         Args:
             file_path (str): Path to the .jsonl data file.
             tokenizer (transformers.PreTrainedTokenizer): The tokenizer for encoding text.
             relation_map (dict): A mapping from relation labels (str) to integer IDs.
+            warned_relations_set (set, optional): A set to track relations that have already triggered a warning.
         """
         self.tokenizer = tokenizer
         self.relation_map = relation_map
+        self.warned_relations = warned_relations_set if warned_relations_set is not None else set()
         self.instances = self._create_instances(file_path)
 
     def _create_instances(self, file_path):
@@ -36,22 +38,33 @@ class REDataset(Dataset):
                 entities = record.get("entities", [])
                 relations = record.get("relations", [])
 
-                # Create a lookup for existing relations for quick access
-                # Maps (from_id, to_id) -> relation_type
+                # --- Data Validation ---
+                for entity in entities:
+                    if not isinstance(entity, dict):
+                        raise TypeError(f"Entities must be dictionaries, but found: {type(entity)}")
+                for rel in relations:
+                    if not isinstance(rel, dict):
+                        raise TypeError(f"Relations must be dictionaries, but found: {type(rel)}")
+
                 relation_lookup = {(rel["from_id"], rel["to_id"]): rel["type"] for rel in relations}
 
-                # Generate all unique pairs of entities
                 for head, tail in itertools.permutations(entities, 2):
                     relation_type = relation_lookup.get((head["id"], tail["id"]), "No_Relation")
-                    
-                    # Ensure the relation type is in our configured map
-                    if relation_type in self.relation_map:
-                        instances.append({
-                            "text": text,
-                            "head": head,
-                            "tail": tail,
-                            "relation": relation_type
-                        })
+
+                    # If a relation type from the data is not in the config, it is not a valid
+                    # instance for training, but "No_Relation" is always considered valid.
+                    if relation_type not in self.relation_map:
+                        if relation_type not in self.warned_relations:
+                            warnings.warn(f"Relation type '{relation_type}' not in config and will be ignored.")
+                            self.warned_relations.add(relation_type)
+                        continue
+
+                    instances.append({
+                        "text": text,
+                        "head": head,
+                        "tail": tail,
+                        "relation": relation_type
+                    })
         return instances
 
     def __len__(self):
@@ -136,6 +149,7 @@ class REDataModule:
         self._add_special_tokens()
         
         self.relation_map = self._create_relation_map()
+        self.warned_relations = set()
 
     def _add_special_tokens(self):
         """Adds custom entity marker tokens to the tokenizer."""
@@ -158,7 +172,8 @@ class REDataModule:
             self.train_dataset = REDataset(
                 file_path=self.train_file,
                 tokenizer=self.tokenizer,
-                relation_map=self.relation_map
+                relation_map=self.relation_map,
+                warned_relations_set=self.warned_relations
             )
         if self.test_file:
             self.test_dataset = REDataset(
@@ -183,3 +198,5 @@ class REDataModule:
             self.test_dataset,
             batch_size=self.config.get('batch_size', 16)
         )
+        
+    
