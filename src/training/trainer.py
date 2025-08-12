@@ -56,7 +56,8 @@ class Trainer:
                 # Move batch to the correct device
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['labels'].to(self.device)
+                label_key = 'labels' if 'labels' in batch else 'label'
+                labels = batch[label_key].to(self.device)
 
                 # Forward pass
                 outputs = self.model(
@@ -121,6 +122,6 @@ class Trainer:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
-        self.model.model.save_pretrained(output_dir)
+        self.model.save_pretrained(output_dir)
         self.datamodule.tokenizer.save_pretrained(output_dir)
         print(f"Model saved to {output_dir}")

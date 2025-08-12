@@ -10,7 +10,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data_loader.ner_datamodule import NERDataModule
-from src.models.bert_ner import BertNerModel
+from src.models.ner_bert import BertNerModel
 from src.training.trainer import Trainer
 
 def run_batch_training(config_path, partition_dir):
