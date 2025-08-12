@@ -46,16 +46,19 @@ The repository is organized to maintain a clear separation between configuration
 ├── scripts/                  # High-level scripts to run experiments
 │   ├── data/
 │   │   └── generate_partitions.py
-│   ├── run_ner_training.py
-│   ├── run_re_training.py
-│   └── run_evaluation.py
+│   ├── training/
+│   │   ├── run_ner_training.py
+│   │   └── run_re_training.py
+│   └── evaluation/
+│       └── run_evaluation.py
 ├── src/                      # Source code for the project
 │   ├── data_loader/          # NER and RE dataloaders
 │   ├── models/               # NER and RE model definitions
 │   ├── evaluation/           # Prediction and evaluation logic
 │   └── training/             # Reusable training loop
 ├── tests/                    # Unit and integration tests
-│   └── unit/
+│   ├── unit/
+│   └── integration/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
@@ -127,7 +130,7 @@ Train either NER or RE models across the generated data partitions. The script w
   - **To run NER training:**
 
     ```bash
-    python scripts/run_ner_training.py \
+    python scripts/training/run_ner_training.py \
       --config-path configs/training_ner_config.yaml \
       --partition-dir data/processed/train-50
     ```
@@ -135,7 +138,7 @@ Train either NER or RE models across the generated data partitions. The script w
   - **To run RE training:**
 
     ```bash
-    python scripts/run_re_training.py \
+    python scripts/training/run_re_trainig.py \
       --config-path configs/training_re_config.yaml \
       --partition-dir data/processed/train-50
     ```
@@ -147,13 +150,13 @@ After training, run evaluation on the holdout test set. Update the `model_path` 
   - **To run NER evaluation:**
 
     ```bash
-    python scripts/run_evaluation.py --config-path configs/evaluation_ner_config.yaml
+    python scripts/evaluation/run_evaluation.py --config-path configs/evaluation_ner_config.yaml
     ```
 
   - **To run RE evaluation:**
 
     ```bash
-    python scripts/run_evaluation.py --config-path configs/evaluation_re_config.yaml
+    python scripts/evaluation/run_evaluation.py --config-path configs/evaluation_re_config.yaml
     ```
 
 -----
