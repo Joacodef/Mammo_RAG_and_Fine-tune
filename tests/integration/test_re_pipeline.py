@@ -8,8 +8,8 @@ import sys
 # Add the project root to the Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from scripts.run_re_trainig import run_batch_re_training
-from scripts.run_evaluation import run_evaluation
+from scripts.training.run_re_trainig import run_batch_re_training
+from scripts.evaluation.run_evaluation import run_evaluation
 
 # --- Fixtures for RE Test Data and Configuration ---
 

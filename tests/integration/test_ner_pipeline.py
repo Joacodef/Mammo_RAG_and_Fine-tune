@@ -9,8 +9,8 @@ import sys
 # This is crucial for the integration test to find the src and scripts modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from scripts.run_ner_training import run_batch_training
-from scripts.run_evaluation import run_evaluation
+from scripts.training.run_ner_training import run_batch_training
+from scripts.evaluation.run_evaluation import run_evaluation
 
 # --- Fixtures for Test Data and Configuration ---
 
