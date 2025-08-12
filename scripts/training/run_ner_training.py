@@ -7,7 +7,7 @@ import torch
 import sys
 
 # Add the project root to the Python path to allow for absolute imports
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.data_loader.ner_datamodule import NERDataModule
 from src.models.ner_bert import BertNerModel

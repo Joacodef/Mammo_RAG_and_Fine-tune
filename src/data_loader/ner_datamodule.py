@@ -133,10 +133,15 @@ class NERDataset(Dataset):
                     # Assign the "I-" (Inside) tag to subsequent tokens of the same entity.
                     else:
                         labels[i] = self.label_map[f"I-{entity_label}"]
-        
-        # Change the label for any token that was not part of an entity from -100 to 0 ("O" tag).
-        # Special tokens remain -100 and will be ignored during loss calculation.
-        labels[labels == -100] = 0
+
+        # Only change the label for tokens that are not special characters
+        # and were not assigned an entity label.
+        for i, (token_start, token_end) in enumerate(offset_mapping):
+            # If the token is not a special token ([CLS], [SEP], etc.) and
+            # has not already been assigned a B- or I- tag, set its label to "O".
+            if token_start != 0 or token_end != 0:
+                if labels[i] == -100:
+                    labels[i] = 0 # "O" label
         return labels
 
 

@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report as re_classification_report
 
 # Add the project root to the Python path
 import sys
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.data_loader.ner_datamodule import NERDataModule
 from src.data_loader.re_datamodule import REDataModule
