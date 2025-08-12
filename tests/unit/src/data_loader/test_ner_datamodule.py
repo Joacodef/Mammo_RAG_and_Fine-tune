@@ -33,16 +33,22 @@ def mock_tokenizer():
     """
     tokenizer = MagicMock()
     
-    # Define a consistent sequence length for all mock tensors.
-    sequence_length = 8
+    # Add the required token ID attributes to the mock object
+    tokenizer.cls_token_id = 101
+    tokenizer.sep_token_id = 102
+    tokenizer.pad_token_id = 0
 
-    # The tokenizer is called once in `__getitem__` and returns a dictionary
-    # where all tensors share the same sequence length.
+    # The tokenizer is called once in `__getitem__` and returns a dictionary.
+    # We now create a realistic input_ids tensor.
     tokenization_result = {
         # --- Start of Change ---
-        "input_ids": torch.randint(1, 1000, (1, sequence_length)),
-        "attention_mask": torch.ones((1, sequence_length), dtype=torch.long),
+        "input_ids": torch.tensor([[
+            tokenizer.cls_token_id, # [CLS]
+            500, 600, 700, 800, 900, 1000, # Mock word IDs
+            tokenizer.sep_token_id  # [SEP]
+        ]]),
         # --- End of Change ---
+        "attention_mask": torch.ones((1, 8), dtype=torch.long),
         "offset_mapping": torch.tensor([
             (0, 0),      # [CLS]
             (0, 6),      # "Report"
@@ -142,7 +148,9 @@ def test_align_labels_correctly(jsonl_file, mock_tokenizer):
     # Tokens:   [CLS] Rprt  one    with    a       finding  .      [SEP]
     # Labels:   O     O     O      O       O       B-FIND   O      O
     # IDs:      0     0     0      0       0       1        0      0
-    expected_labels = torch.tensor([0, 0, 0, 0, 0, 1, 0, 0], dtype=torch.long)
+    # The special tokens ([CLS] and [SEP]) at the beginning and end should
+    # now be labeled -100 to be ignored by the loss function.
+    expected_labels = torch.tensor([-100, 0, 0, 0, 0, 1, 0, -100], dtype=torch.long)
 
     assert torch.equal(labels, expected_labels)
 
@@ -173,8 +181,13 @@ def test_align_labels_with_no_entities(jsonl_file, mock_tokenizer):
     item = dataset[1]
     labels = item['labels']
 
-    # All labels should be 0 ('O') since there are no entities
-    assert torch.all(labels == 0)
+    # All "real" token labels should be 0 ('O').
+    # Special tokens should be -100. We mask the special tokens for the check.
+    special_token_mask = (item['input_ids'] == mock_tokenizer.cls_token_id) | \
+                         (item['input_ids'] == mock_tokenizer.sep_token_id) | \
+                         (item['input_ids'] == mock_tokenizer.pad_token_id)
+    
+    assert torch.all(labels[~special_token_mask] == 0)
 
 
 # --- Test Cases for NERDataModule ---
@@ -364,5 +377,10 @@ def test_dataset_with_inverted_offsets(inverted_offset_file, mock_tokenizer):
     item = dataset[0]
     labels = item['labels']
 
-    # All labels should be 0 ('O') since the inverted offsets should be ignored.
-    assert torch.all(labels == 0)
+    # All "real" token labels should be 0 ('O') since the inverted offsets are ignored.
+    # Special tokens should be -100.
+    special_token_mask = (item['input_ids'] == mock_tokenizer.cls_token_id) | \
+                         (item['input_ids'] == mock_tokenizer.sep_token_id) | \
+                         (item['input_ids'] == mock_tokenizer.pad_token_id)
+
+    assert torch.all(labels[~special_token_mask] == 0)

@@ -44,6 +44,7 @@ def run_batch_training(config_path, partition_dir):
     
     # This is the unique parent directory for this entire batch training run
     run_specific_output_dir = base_output_dir / "ner" / data_partition_name / timestamp
+    run_specific_output_dir.mkdir(parents=True, exist_ok=True)
     print(f"All models for this run will be saved in subfolders of: {run_specific_output_dir}")
 
     # Save a copy of the training configuration for reproducibility

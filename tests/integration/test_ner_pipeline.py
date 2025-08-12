@@ -101,10 +101,17 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     )
 
     # --- 3. Assert Training Outputs ---
-    model_name = ner_integration_config['model']['base_model'].replace("/", "_")
-    expected_model_dir = Path(ner_integration_config['paths']['output_dir']) / model_name / "train-2" / "sample-1"
+    # The output path now includes a timestamp, so we must find it dynamically.
+    base_output_dir = Path(ner_integration_config['paths']['output_dir']) / "ner" / "train-2"
     
-    assert expected_model_dir.exists(), "Model output directory was not created."
+    # Find the single timestamped directory created by the training run
+    timestamp_dirs = [d for d in base_output_dir.iterdir() if d.is_dir()]
+    assert len(timestamp_dirs) == 1, "Expected a single timestamped output directory."
+    
+    # Define the final path to the specific sample model
+    expected_model_dir = timestamp_dirs[0] / "sample-1"
+    
+    assert expected_model_dir.exists(), f"Model output directory was not created at {expected_model_dir}."
     
     # Check for either the standard PyTorch weights file or the SafeTensors equivalent
     weights_file_exists = (
@@ -120,31 +127,31 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     # --- 4. Run Evaluation ---
     print("\n--- Running NER Evaluation ---")
     
-    # Prepare evaluation config
+    # The evaluation function is called directly on the single model trained in this test.
+    # We must create a config dictionary with the expected 'model_path' key.
     evaluation_config = {
         'task': "ner",
-        'model_path': str(expected_model_dir),
+        'model_path': str(expected_model_dir), # Use model_path for the specific sample
         'test_file': str(test_file_path),
-        'entity_labels': ner_integration_config['model']['entity_labels'],
-        'output_dir': str(tmp_path / "output" / "evaluation_results"),
+        'model': { # Nest the entity labels as required
+            'entity_labels': ner_integration_config['model']['entity_labels']
+        },
+        'output_dir': str(tmp_path / "output" / "evaluation_results_ner"),
         'batch_size': 1
     }
-    evaluation_config_path = tmp_path / "evaluation_ner_config.yaml"
-    with open(evaluation_config_path, 'w') as f:
-        yaml.dump(evaluation_config, f)
-        
-    run_evaluation(config_path=str(evaluation_config_path))
+    
+    # Call the evaluation function with the correct config for a single run
+    report = run_evaluation(evaluation_config)
 
     # --- 5. Assert Evaluation Outputs ---
-    expected_metrics_file = Path(evaluation_config['output_dir']) / f"evaluation_metrics_{expected_model_dir.name}.json"
-    assert expected_metrics_file.exists(), "Evaluation metrics file was not created."
-    
-    with open(expected_metrics_file, 'r') as f:
-        metrics = json.load(f)
-    
-    assert "FIND" in metrics, "FIND entity not found in evaluation report."
-    assert "REG" in metrics, "REG entity not found in evaluation report."
-    # The seqeval report includes several averages but not a single 'accuracy' key.
-    # We will check for 'weighted avg' as a reliable indicator of a valid report.
-    assert "weighted avg" in metrics, "Weighted average not found in evaluation report."
+    # The function returns the report, so we can check it directly
+    assert "FIND" in report, "FIND entity not found in evaluation report."
+    assert "REG" in report, "REG entity not found in evaluation report."
+    assert "weighted avg" in report, "'weighted avg' not found in evaluation report."
+
+    # Verify that the individual metrics file was created in the correct directory
+    output_dir = Path(evaluation_config['output_dir'])
+    expected_metrics_file = output_dir / f"evaluation_metrics_{expected_model_dir.name}.json"
+    assert expected_metrics_file.exists(), "Individual metrics file was not created."
+
     print("--- Evaluation Successful and Metrics Verified ---")

@@ -137,19 +137,18 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
         'output_dir': str(tmp_path / "output" / "evaluation_results_re"),
         'batch_size': 1
     }
-    evaluation_config_path = tmp_path / "evaluation_re_config.yaml"
-    with open(evaluation_config_path, 'w') as f:
-        yaml.dump(evaluation_config, f)
-        
-    run_evaluation(config_path=str(evaluation_config_path))
+    
+    # Call the evaluation function directly with the config dictionary
+    report = run_evaluation(evaluation_config)
 
     # --- 5. Assert Evaluation Outputs ---
-    expected_metrics_file = Path(evaluation_config['output_dir']) / f"evaluation_metrics_{expected_model_dir.name}.json"
-    assert expected_metrics_file.exists(), "RE evaluation metrics file was not created."
+    # The function returns the report, which we can check directly
+    assert "ubicar" in report, "'ubicar' relation not found in evaluation report."
+    assert "accuracy" in report, "Accuracy not found in RE evaluation report."
     
-    with open(expected_metrics_file, 'r') as f:
-        metrics = json.load(f)
-    
-    assert "ubicar" in metrics, "'ubicar' relation not found in evaluation report."
-    assert "accuracy" in metrics, "Accuracy not found in RE evaluation report."
+    # Verify that the individual metrics file was created
+    output_dir = Path(evaluation_config['output_dir'])
+    expected_metrics_file = output_dir / f"evaluation_metrics_{expected_model_dir.name}.json"
+    assert expected_metrics_file.exists(), "Individual RE metrics file was not created."
+
     print("--- RE Evaluation Successful and Metrics Verified ---")
