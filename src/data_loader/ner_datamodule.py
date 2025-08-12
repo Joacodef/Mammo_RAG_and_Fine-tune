@@ -47,19 +47,27 @@ class NERDataset(Dataset):
         """
         record = self.data[idx]
         text = record["text"]
-        entities = record.get("entities", []) # Use .get for safety if entities are missing
+        entities = record.get("entities", [])
 
+        # Tokenize the text and request the offset mapping, which provides
+        # the start and end character positions for each token.
         tokenized_inputs = self.tokenizer(
             text,
             truncation=True,
             padding="max_length",
             max_length=512,
-            return_tensors="pt"
+            return_tensors="pt",
+            return_offsets_mapping=True # Request character offsets for each token
         )
 
         input_ids = tokenized_inputs["input_ids"].squeeze()
         attention_mask = tokenized_inputs["attention_mask"].squeeze()
-        labels = self._align_labels(input_ids, entities)
+        
+        # The offset mapping is used to align character-based entity labels
+        # with the token-based input for the model.
+        offset_mapping = tokenized_inputs["offset_mapping"].squeeze()
+
+        labels = self._align_labels(offset_mapping, entities)
 
         return {
             "input_ids": input_ids,
@@ -67,20 +75,29 @@ class NERDataset(Dataset):
             "labels": labels,
         }
 
-    def _align_labels(self, input_ids, entities):
+    def _align_labels(self, offset_mapping, entities):
         """
-        Aligns entity labels with the tokenized input_ids.
-        If an entity label is not in the configured label_map, it is ignored and a warning is issued once.
+        Aligns entity labels with the tokenized input using the offset mapping.
+
+        Args:
+            offset_mapping (torch.Tensor): A tensor where each element is a pair
+                                           of (start_char, end_char) for a token.
+            entities (list): A list of entity dictionaries from the raw data.
+
+        Returns:
+            torch.Tensor: A tensor of label IDs aligned with the input tokens.
         """
-        labels = torch.full(input_ids.shape, fill_value=-100, dtype=torch.long) # Use -100 to ignore loss on non-entity tokens
-        word_ids = self.tokenizer(self.tokenizer.decode(input_ids, skip_special_tokens=True), add_special_tokens=False).word_ids()
+        # Initialize labels with -100, a value ignored by the loss function,
+        # for all positions including special tokens like [CLS] and [SEP].
+        labels = torch.full(offset_mapping.shape[:1], fill_value=-100, dtype=torch.long)
 
         for entity in entities:
-            # Check for the entity itself
             if not isinstance(entity, dict):
                 raise TypeError(f"Entity must be a dictionary, but got: {type(entity)}")
 
             entity_label = entity["label"]
+            
+            # Check if the entity type is one that the model is configured to recognize.
             if f"B-{entity_label}" not in self.label_map:
                 if entity_label not in self.warned_entities:
                     warnings.warn(f"Entity label '{entity_label}' not found in config and will be ignored.")
@@ -89,7 +106,6 @@ class NERDataset(Dataset):
 
             start_char, end_char = entity["start_offset"], entity["end_offset"]
 
-            # Validate offset types
             if not isinstance(start_char, int) or not isinstance(end_char, int):
                 raise TypeError(
                     f"Entity offsets must be integers. "
@@ -97,34 +113,29 @@ class NERDataset(Dataset):
                     f"end_offset: {end_char} (type {type(end_char)})."
                 )
 
-            # Check for inverted offsets
             if start_char >= end_char:
                 continue
-                
-            start_token_idx, end_token_idx = -1, -1
 
-            # This part of the logic can be optimized, but for now, we'll keep it as is.
-            # A single call to the tokenizer would be more efficient.
-            token_offsets = self.tokenizer(
-                self.tokenizer.decode(input_ids, skip_special_tokens=True)
-            ).encodings[0].offsets
+            # Find all tokens whose character spans fall within the entity's span.
+            is_first_token = True
+            for i, (token_start, token_end) in enumerate(offset_mapping):
+                # Skip special tokens, which have an offset of (0, 0).
+                if token_start == 0 and token_end == 0:
+                    continue
 
-            for i, (start, end) in enumerate(token_offsets):
-                if start <= start_char < end:
-                    start_token_idx = i
-                if start < end_char <= end:
-                    end_token_idx = i
-                    break # Exit after finding the end token
-            
-            if start_token_idx != -1 and end_token_idx != -1:
-                # Assign B-tag to the first token of the entity
-                labels[start_token_idx + 1] = self.label_map[f"B-{entity_label}"]
-                # Assign I-tags to subsequent tokens of the same entity
-                for i in range(start_token_idx + 2, end_token_idx + 2):
-                    if labels[i] == -100: # Ensure we don't overwrite existing labels
+                # A token is part of the entity if its span overlaps with the entity's span.
+                # The condition is max(start) < min(end).
+                if max(token_start, start_char) < min(token_end, end_char):
+                    # Assign the "B-" (Beginning) tag to the first token of an entity.
+                    if is_first_token:
+                        labels[i] = self.label_map[f"B-{entity_label}"]
+                        is_first_token = False
+                    # Assign the "I-" (Inside) tag to subsequent tokens of the same entity.
+                    else:
                         labels[i] = self.label_map[f"I-{entity_label}"]
         
-        # Set all other tokens to 'O'
+        # Change the label for any token that was not part of an entity from -100 to 0 ("O" tag).
+        # Special tokens remain -100 and will be ignored during loss calculation.
         labels[labels == -100] = 0
         return labels
 
