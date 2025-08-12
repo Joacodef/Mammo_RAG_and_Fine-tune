@@ -46,9 +46,8 @@ def mock_model():
     model.parameters.return_value = [torch.nn.Parameter(torch.randn(2, 2))]
     model.named_parameters.return_value = [('param', torch.nn.Parameter(torch.randn(2, 2)))]
     
-    # Mock the inner 'model' attribute for saving
-    model.model = MagicMock()
-    model.model.save_pretrained.return_value = None
+    # Mock the save_pretrained method on the model wrapper itself
+    model.save_pretrained.return_value = None
     
     return model
 
@@ -164,7 +163,7 @@ def test_save_model(mock_makedirs, mock_exists, mock_model, mock_datamodule, moc
     mock_makedirs.assert_called_once_with(output_dir)
     
     # Verify that the save methods were called correctly
-    mock_model.model.save_pretrained.assert_called_once_with(output_dir)
+    mock_model.save_pretrained.assert_called_once_with(output_dir)
     mock_datamodule.tokenizer.save_pretrained.assert_called_once_with(output_dir)
 
 
