@@ -7,7 +7,9 @@ import torch
 import numpy as np
 from collections import defaultdict
 from seqeval.metrics import classification_report as ner_classification_report
-from sklearn.metrics import classification_report as re_classification_report
+from sklearn.metrics import classification_report as re_classification_report, roc_auc_score
+from sklearn.preprocessing import label_binarize
+from scipy.special import softmax
 from datetime import datetime
 import shutil
 
@@ -81,11 +83,13 @@ def run_evaluation(config):
     predictor = Predictor(model=model, device=device)
 
     # --- 4. Get Predictions ---
-    predictions, true_labels = predictor.predict(test_loader, task_type=task)
+    predictions, true_labels, logits = predictor.predict(test_loader, task_type=task)
 
     # --- 5. Calculate and Save Metrics ---
     print("\n--- Evaluation Results ---")
     if task == 'ner':
+        # Convert integer labels and predictions to their string representations.
+        # The inverse label map is used for the conversion.
         true_labels_str = [[inv_label_map.get(l, "O") for l in seq] for seq in true_labels]
         pred_labels_str = [[inv_label_map.get(p, "O") for p in pred_seq] for pred_seq in predictions]
         report = ner_classification_report(true_labels_str, pred_labels_str, output_dict=True, zero_division=0)
@@ -93,6 +97,28 @@ def run_evaluation(config):
         true_labels_str = [inv_label_map.get(l, "No_Relation") for l in true_labels]
         pred_labels_str = [inv_label_map.get(p, "No_Relation") for p in predictions]
         report = re_classification_report(true_labels_str, pred_labels_str, output_dict=True, zero_division=0)
+
+        # --- AUC Calculation for RE Task ---
+        n_classes = len(inv_label_map)
+        if n_classes > 1 and len(np.unique(true_labels)) > 1:
+            try:
+                # Binarize the true labels for multi-class AUC calculation
+                true_labels_bin = label_binarize(true_labels, classes=list(range(n_classes)))
+                
+                # Apply softmax to logits to get probabilities
+                probabilities = softmax(logits, axis=1)
+
+                if n_classes > 2:
+                    # Multi-class case
+                    auc_score = roc_auc_score(true_labels_bin, probabilities, multi_class='ovr', average='macro')
+                else:
+                    # Binary case: score of the positive class
+                    auc_score = roc_auc_score(true_labels_bin, probabilities[:, 1])
+
+                report['auc'] = auc_score
+            except ValueError as e:
+                print(f"Warning: Could not compute AUC. Reason: {e}")
+                report['auc'] = 'N/A'
 
     # Convert numpy types to native Python types for JSON serialization
     report = convert_numpy_types(report)
@@ -118,11 +144,16 @@ def aggregate_and_save_metrics(all_reports, output_dir):
     """
     # Use defaultdict to easily append scores for each metric
     aggregated_metrics = defaultdict(lambda: defaultdict(list))
+    auc_scores = []
     
     # --- 1. Collect all scores from all reports ---
     for report in all_reports:
+        # Collect AUC score if it exists and is a number
+        if 'auc' in report and isinstance(report['auc'], (int, float)):
+            auc_scores.append(report['auc'])
+
         for label, metrics in report.items():
-            # Skip non-dict items like 'accuracy' which is a flat value
+            # Skip non-dict items like 'accuracy' or 'auc' which are flat values
             if isinstance(metrics, dict):
                 aggregated_metrics[label]['precision'].append(metrics.get('precision', 0))
                 aggregated_metrics[label]['recall'].append(metrics.get('recall', 0))
@@ -144,6 +175,13 @@ def aggregate_and_save_metrics(all_reports, output_dir):
                 'mean': np.mean(metrics['f1-score']),
                 'std': np.std(metrics['f1-score'])
             }
+        }
+    
+    # Add AUC statistics to the summary report if available
+    if auc_scores:
+        summary_report['auc'] = {
+            'mean': np.mean(auc_scores),
+            'std': np.std(auc_scores)
         }
     
     # --- 3. Save the final aggregated report ---

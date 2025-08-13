@@ -103,7 +103,7 @@ def test_predict_ner_task(mock_tqdm, mock_ner_model, mock_ner_dataloader, mock_d
     token-level, padded predictions.
     """
     predictor = Predictor(model=mock_ner_model, device=mock_device)
-    predictions, true_labels = predictor.predict(mock_ner_dataloader, 'ner')
+    predictions, true_labels, _ = predictor.predict(mock_ner_dataloader, 'ner')
 
     # Expected predictions based on mock_ner_model logits
     expected_preds = [
@@ -129,7 +129,7 @@ def test_predict_re_task(mock_tqdm, mock_re_model, mock_re_dataloader, mock_devi
     sequence-level predictions.
     """
     predictor = Predictor(model=mock_re_model, device=mock_device)
-    predictions, true_labels = predictor.predict(mock_re_dataloader, 're')
+    predictions, true_labels, _ = predictor.predict(mock_re_dataloader, 're')
 
     # Expected predictions based on mock_re_model logits argmax
     expected_preds = [1, 0]
@@ -147,7 +147,8 @@ def test_predict_with_empty_dataloader(mock_tqdm, mock_ner_model, mock_empty_dat
     Tests that the predict method handles an empty dataloader gracefully.
     """
     predictor = Predictor(model=mock_ner_model, device=mock_device)
-    predictions, true_labels = predictor.predict(mock_empty_dataloader, 'ner')
+    predictions, true_labels, logits = predictor.predict(mock_empty_dataloader, 'ner')
 
     assert predictions == []
     assert true_labels == []
+    assert logits.size == 0

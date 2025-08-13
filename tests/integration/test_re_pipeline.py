@@ -145,6 +145,7 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
     # The function returns the report, which we can check directly
     assert "ubicar" in report, "'ubicar' relation not found in evaluation report."
     assert "accuracy" in report, "Accuracy not found in RE evaluation report."
+    assert "auc" in report, "AUC score not found in RE evaluation report."
     
     # Verify that the individual metrics file was created
     output_dir = Path(evaluation_config['output_dir'])

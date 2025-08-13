@@ -13,7 +13,6 @@ test_file: 'data/processed/test.jsonl'
 relation_labels:
   - "describir"
   - "ubicar"
-  - "No_Relation"
 
 # Directory where the evaluation results will be saved.
 output_dir: 'output/evaluation_results/re'

@@ -35,9 +35,11 @@ class Predictor:
             tuple: A tuple containing:
                 - all_predictions (list): A list of predicted label sequences/IDs.
                 - all_true_labels (list): A list of ground-truth label sequences/IDs.
+                - all_logits (numpy.ndarray): An array of the raw output logits from the model.
         """
         all_predictions = []
         all_true_labels = []
+        all_logits = []
 
         progress_bar = tqdm(test_dataloader, desc=f"Evaluating for {task_type.upper()}")
         
@@ -67,6 +69,9 @@ class Predictor:
                 # Move data back to CPU for evaluation
                 predictions = predictions.detach().cpu().numpy()
                 true_labels = labels.detach().cpu().numpy()
+                batch_logits = logits.detach().cpu().numpy()
+
+                all_logits.append(batch_logits)
 
                 if task_type == 'ner':
                     # Align predictions and labels for NER, ignoring padding
@@ -84,4 +89,11 @@ class Predictor:
                     all_predictions.extend(predictions)
                     all_true_labels.extend(true_labels)
 
-        return all_predictions, all_true_labels
+        # If the dataloader was empty, return empty containers.
+        if not all_logits:
+            return [], [], np.array([])
+
+        # Vertically stack the logits from all batches into a single numpy array
+        all_logits = np.concatenate(all_logits, axis=0)
+
+        return all_predictions, all_true_labels, all_logits
