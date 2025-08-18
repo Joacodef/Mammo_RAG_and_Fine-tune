@@ -10,7 +10,8 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from scripts.training.run_ner_training import run_batch_training
-from scripts.evaluation.run_evaluation import run_evaluation
+from scripts.evaluation.generate_finetuned_predictions import run_prediction_and_save
+from scripts.evaluation.calculate_final_metrics import main as calculate_metrics
 
 # --- Fixtures for Test Data and Configuration ---
 
@@ -141,17 +142,36 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     }
     
     # Call the evaluation function with the correct config for a single run
-    report = run_evaluation(evaluation_config)
+    run_prediction_and_save(evaluation_config)
 
-    # --- 5. Assert Evaluation Outputs ---
-    # The function returns the report, so we can check it directly
-    assert "FIND" in report, "FIND entity not found in evaluation report."
-    assert "REG" in report, "REG entity not found in evaluation report."
-    assert "weighted avg" in report, "'weighted avg' not found in evaluation report."
-
-    # Verify that the individual metrics file was created in the correct directory
+    # --- 5. Assert Prediction Outputs ---
+    # The output directory now contains the raw predictions file.
     output_dir = Path(evaluation_config['output_dir'])
-    expected_metrics_file = output_dir / f"evaluation_metrics_{expected_model_dir.name}.json"
-    assert expected_metrics_file.exists(), "Individual metrics file was not created."
+    expected_prediction_file = output_dir / f"raw_predictions_{expected_model_dir.name}.jsonl"
+    assert expected_prediction_file.exists(), "Raw prediction file was not created."
+    print("--- Prediction Generation Successful and Artifacts Verified ---")
 
-    print("--- Evaluation Successful and Metrics Verified ---")
+    # --- 6. Run Metrics Calculation ---
+    print("\n--- Running Metrics Calculation ---")
+    metrics_output_dir = tmp_path / "output" / "final_metrics_ner"
+    final_metrics_path = metrics_output_dir / "final_metrics.json"
+
+    # Call the unified metrics calculation script
+    calculate_metrics(
+        prediction_path=str(expected_prediction_file),
+        eval_type='finetuned',
+        config_path=str(training_config_path), # The config contains the necessary label map
+        output_path=str(final_metrics_path)
+    )
+
+    # --- 7. Assert Final Metrics Outputs ---
+    assert final_metrics_path.exists(), "Final metrics report file was not created."
+
+    # Optionally, check the content of the final report
+    with open(final_metrics_path, 'r') as f:
+        report = json.load(f)
+
+    assert "FIND" in report, "FIND entity not found in final metrics report."
+    assert "REG" in report, "REG entity not found in final metrics report."
+    assert "weighted avg" in report, "'weighted avg' not found in final metrics report."
+    print("--- Metrics Calculation Successful and Report Verified ---")

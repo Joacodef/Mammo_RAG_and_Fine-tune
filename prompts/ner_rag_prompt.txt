@@ -1,0 +1,13 @@
+You are an expert radiologist specializing in mammography report analysis. Your task is to perform Named Entity Recognition.
+From the text below, extract all entities corresponding to the following labels. Format the output as a JSON list of objects, where each object has 'text' and 'label' keys.
+
+LABEL DEFINITIONS:
+{entity_definitions}
+
+EXAMPLES:
+{examples}
+
+NEW REPORT TO ANALYZE:
+---
+Text: {new_report_text}
+Output:

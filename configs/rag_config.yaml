@@ -1,0 +1,76 @@
+# [create] configs/rag_config.yaml
+# Configuration for the Retrieval-Augmented Generation (RAG) pipeline.
+# This file centralizes settings for the LLM provider, vector database,
+# and prompting strategies for the NER task.
+
+# --- LLM Configuration ---
+llm:
+  # The active provider to be used by the factory.
+  # This key determines which client implementation will be loaded.
+  # Supported options: "openai", "aws_sagemaker" (future)
+  provider: "openai"
+
+  # --- Provider-Specific Configurations ---
+
+  # Settings for the OpenAI client.
+  # These are used only when provider is set to "openai".
+  openai:
+    # Specifies the exact model to use from the OpenAI API.
+    # This can be changed to any compatible model name.
+    # Examples: "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"
+    model: "gpt-4o"
+
+    # Controls the randomness of the output. Lower values make the model
+    # more deterministic and focused.
+    temperature: 0.1
+
+  # Settings for a future AWS SageMaker client.
+  # These are used only when provider is set to "aws_sagemaker".
+  aws_sagemaker:
+    # The name of the deployed SageMaker endpoint that hosts the model.
+    endpoint_name: "llama-3-70b-instruct-placeholder"
+
+    # The AWS region where the SageMaker endpoint is deployed.
+    region: "us-east-1"
+
+
+# --- Vector Database Configuration ---
+vector_db:
+  # Path where the FAISS index file will be stored.
+  index_path: "output/vector_db/faiss_index.bin"
+
+  # Path to the source data used to build the vector database.
+  # This should be the global training set created by generate_partitions.py.
+  source_data_path: "data/processed/train-all/sample-1/train.jsonl"
+
+  # The name of the sentence-transformer model to use for generating embeddings.
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+
+# --- RAG Prompting Configuration ---
+rag_prompt:
+  # Path to the text file containing the prompt template.
+  prompt_template_path: "prompts/ner_rag_prompt.txt"
+  
+  # The number of similar examples to retrieve from the vector database
+  # to include in the few-shot prompt.
+  n_examples: 3
+
+  # The list of entity labels to be extracted by the LLM.
+  # Providing a clear name and description for each label is crucial for
+  # guiding the model to make accurate and consistent extractions.
+  entity_labels:
+    - name: "HALL_presente"
+      description: "A finding or observation explicitly mentioned as present in the mammogram. Example: 'Nódulo', 'Microcalcificaciones'."
+    - name: "HALL_ausente"
+      description: "A finding or observation explicitly mentioned as NOT present. Often follows phrases like 'No se observan' or 'sin'. Example: 'sin adenopatías'."
+    - name: "CARACT"
+      description: "A characteristic or descriptor of a finding. Example: 'bien delimitado', 'agrupadas', 'espiculado'."
+    - name: "CUAD"
+      description: "The quadrant of the breast where a finding is located. Example: 'CSE' (cuadrante superoexterno), 'CSI' (cuadrante superointerno)."
+    - name: "LAT"
+      description: "The laterality of the breast. Example: 'derecho', 'izquierda', 'bilateral'."
+    - name: "REG"
+      description: "A specific region or location within the breast. Example: 'periareolar', 'axilar', 'retroareolar'."
+    - name: "DENS"
+      description: "A description of the overall breast density. Example: 'mamas densas', 'tejido fibroglandular disperso'."

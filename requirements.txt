@@ -10,6 +10,8 @@ datasets
 # For RAG
 openai
 sentence-transformers
+faiss-cpu
+boto3
 
 # Utilities
 pyyaml

@@ -1,0 +1,135 @@
+import pytest
+import yaml
+from pathlib import Path
+import json
+import sys
+from unittest.mock import patch, MagicMock
+
+# Add the project root to the Python path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from scripts.data.build_vector_db import main as build_vector_db_main
+from scripts.evaluation.generate_rag_predictions import main as generate_rag_predictions_main
+
+# --- Fixtures for RAG Test Data and Configuration ---
+
+@pytest.fixture
+def rag_integration_config(tmp_path):
+    """Provides a minimal configuration for the RAG integration test."""
+    config = {
+        'llm': {
+            'provider': 'openai',
+            'openai': {
+                'model': 'mock-gpt-model',
+                'temperature': 0.0
+            }
+        },
+        'vector_db': {
+            'index_path': str(tmp_path / "vector_db/test_index.bin"),
+            'source_data_path': str(tmp_path / "data/source_data.jsonl"),
+            'embedding_model': 'prajjwal1/bert-tiny' # Use a fast, small model
+        },
+        'rag_prompt': {
+            'prompt_template_path': str(tmp_path / "prompts/test_prompt.txt"),
+            'n_examples': 1,
+            'entity_labels': [
+                {'name': 'FIND', 'description': 'A finding.'},
+                {'name': 'REG', 'description': 'A region.'}
+            ]
+        },
+        'paths': {
+            'test_file': str(tmp_path / "data/test_data.jsonl"),
+            'output_dir': str(tmp_path / "output/rag_results")
+        }
+    }
+    # Create the config file
+    config_path = tmp_path / "rag_config.yaml"
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f)
+    return str(config_path)
+
+@pytest.fixture
+def setup_rag_test_environment(tmp_path, rag_integration_config):
+    """Sets up all necessary files for the RAG pipeline test."""
+    config_path = Path(rag_integration_config)
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Create source data for the vector DB
+    source_data = [
+        {"text": "A finding in the left region.", "entities": [{"start_offset": 2, "end_offset": 9, "label": "FIND"}]}
+    ]
+    source_data_path = Path(config['vector_db']['source_data_path'])
+    source_data_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(source_data_path, 'w') as f:
+        for record in source_data:
+            f.write(json.dumps(record) + '\n')
+
+    # Create test data to be evaluated
+    test_data = [
+        {"text": "This is a test report with a finding.", "entities": []}
+    ]
+    test_data_path = Path(config['paths']['test_file'])
+    with open(test_data_path, 'w') as f:
+        for record in test_data:
+            f.write(json.dumps(record) + '\n')
+
+    # Create a prompt template file
+    prompt_template_path = Path(config['rag_prompt']['prompt_template_path'])
+    prompt_template_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(prompt_template_path, 'w') as f:
+        f.write("Test prompt: {new_report_text}")
+
+    return config_path
+
+# --- RAG Integration Test ---
+
+@patch('src.utils.cost_tracker.CostTracker.save_log') # Mock save_log to avoid file I/O
+@patch('src.llm_services.OpenAIClient')
+def test_rag_prediction_pipeline(mock_openai_client, mock_save_log, setup_rag_test_environment):
+    """
+    Tests the complete RAG prediction pipeline.
+    This test mocks the external API call to OpenAI.
+    """
+    # --- 1. Setup Mock for OpenAI Client ---
+    # Define the simple JSON-serializable list that our mock client should return.
+    mock_api_response_entities = [{"text": "a finding", "label": "FIND"}]
+
+    # This is the mock for the client instance itself.
+    mock_client_instance = MagicMock()
+
+    # Mock the public method that the script actually calls.
+    mock_client_instance.get_ner_prediction.return_value = mock_api_response_entities
+
+    # The factory will now return our correctly configured mock instance.
+    mock_openai_client.return_value = mock_client_instance
+
+    config_path = setup_rag_test_environment
+
+    # --- 2. Build the Vector Database ---
+    print("\n--- Building RAG Vector Database for Test ---")
+    build_vector_db_main(config_path=config_path, force_rebuild=True)
+
+    # --- 3. Run RAG Prediction Generation ---
+    print("\n--- Running RAG Prediction Generation ---")
+    generate_rag_predictions_main(config_path=config_path)
+
+    # --- 4. Assert Outputs ---
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Assert that the prediction file was created
+    output_dir = Path(config['paths']['output_dir'])
+    prediction_file = output_dir / "rag_predictions.jsonl"
+    assert prediction_file.exists(), "RAG prediction file was not created."
+
+    # Assert the content of the prediction file
+    with open(prediction_file, 'r') as f:
+        predictions = [json.loads(line) for line in f]
+    assert len(predictions) == 1
+    assert predictions[0]['predicted_entities'] == mock_api_response_entities
+
+    # Assert that the cost tracker's save method was called once
+    mock_save_log.assert_called_once()
+
+    print("--- RAG Pipeline Test Successful ---")
