@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 from collections import defaultdict
 from seqeval.metrics import classification_report as ner_classification_report
+from sklearn.metrics import classification_report as sklearn_classification_report
 import numpy as np
 
 # Add the project root to the Python path
@@ -11,6 +12,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.data_loader.ner_datamodule import NERDataModule
+from src.data_loader.re_datamodule import REDataModule
 
 def convert_numpy_types(obj):
     """
@@ -104,15 +106,17 @@ def calculate_rag_metrics(predictions: list) -> dict:
         for entity in fn:
             entity_metrics[entity[1]]['fn'] += 1
 
-    # Calculate final report
+# Calculate final report
     report = {}
     all_tp, all_fp, all_fn = 0, 0, 0
+    total_support = 0
 
     sorted_labels = sorted(entity_metrics.keys())
     for label in sorted_labels:
         tp = entity_metrics[label]['tp']
         fp = entity_metrics[label]['fp']
         fn = entity_metrics[label]['fn']
+        support = tp + fn
         
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
@@ -122,13 +126,14 @@ def calculate_rag_metrics(predictions: list) -> dict:
             'precision': precision,
             'recall': recall,
             'f1-score': f1,
-            'support': tp + fn
+            'support': support
         }
         all_tp += tp
         all_fp += fp
         all_fn += fn
-
-    # Calculate micro/overall average
+        total_support += support
+    
+    # Calculate micro average (overall performance)
     micro_precision = all_tp / (all_tp + all_fp) if (all_tp + all_fp) > 0 else 0
     micro_recall = all_tp / (all_tp + all_fn) if (all_tp + all_fn) > 0 else 0
     micro_f1 = 2 * (micro_precision * micro_recall) / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
@@ -137,13 +142,63 @@ def calculate_rag_metrics(predictions: list) -> dict:
         'precision': micro_precision,
         'recall': micro_recall,
         'f1-score': micro_f1,
-        'support': all_tp + all_fn
+        'support': total_support
     }
-    # Weighted and macro are more complex, micro avg is a good start
-    report['weighted avg'] = report['micro avg']
 
+    # Calculate macro average (unweighted average of per-class metrics)
+    macro_precision = sum(report[label]['precision'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
+    macro_recall = sum(report[label]['recall'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
+    macro_f1 = sum(report[label]['f1-score'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
+
+    report['macro avg'] = {
+        'precision': macro_precision,
+        'recall': macro_recall,
+        'f1-score': macro_f1,
+        'support': total_support
+    }
+
+    # Calculate weighted average (average weighted by support)
+    weighted_precision = sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
+    weighted_recall = sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
+    weighted_f1 = sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
+
+    report['weighted avg'] = {
+        'precision': weighted_precision,
+        'recall': weighted_recall,
+        'f1-score': weighted_f1,
+        'support': total_support
+    }
 
     return report
+
+def calculate_finetuned_re_metrics(predictions: list, config: dict) -> dict:
+    """
+    Calculates RE metrics for fine-tuned models using scikit-learn.
+
+    Args:
+        predictions (list): The list of raw prediction records.
+        config (dict): The evaluation configuration, needed for the label map.
+
+    Returns:
+        dict: A classification report dictionary from scikit-learn.
+    """
+    true_labels = [record['true_labels'] for record in predictions]
+    pred_labels = [record['predicted_labels'] for record in predictions]
+
+    relation_labels = config.get('model', {}).get('relation_labels', [])
+    
+    # Create the integer list of all possible labels. This is the key change.
+    label_ids = list(range(len(relation_labels)))
+
+    return sklearn_classification_report(
+        true_labels,
+        pred_labels,
+        labels=label_ids, # Explicitly provide all possible label IDs
+        target_names=relation_labels,
+        output_dict=True,
+        zero_division=0
+    )
+
 
 
 def main(prediction_path: str, eval_type: str, config_path: str, output_path: str, test_file: str):
@@ -155,17 +210,22 @@ def main(prediction_path: str, eval_type: str, config_path: str, output_path: st
 
     predictions = load_predictions(prediction_path)
 
-    if eval_type == 'finetuned':
+    if eval_type == 'finetuned_ner':
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         report = calculate_finetuned_metrics(predictions, config, test_file)
+
+    elif eval_type == 'finetuned_re':
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        report = calculate_finetuned_re_metrics(predictions, config)
 
     elif eval_type == 'rag':
         report = calculate_rag_metrics(predictions)
 
     else:
-        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'finetuned' or 'rag'.")
-
+        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'finetuned_ner', 'finetuned_re', or 'rag'.")
+    
     # Convert all numpy types in the report to native Python types
     report = convert_numpy_types(report)
     
@@ -196,7 +256,7 @@ if __name__ == '__main__':
         '--type',
         type=str,
         required=True,
-        choices=['finetuned', 'rag'],
+        choices=['finetuned_ner', 'finetuned_re', 'rag'],
         help="The type of model that generated the predictions."
     )
     parser.add_argument(

@@ -69,6 +69,11 @@ def run_batch_training(config_path, partition_dir):
         print(f"Loading data from: {train_file_path}")
         datamodule = NERDataModule(config=config, train_file=train_file_path)
         datamodule.setup()
+
+        # If the dataset is empty, skip to the next sample.
+        if len(datamodule.train_dataset) == 0:
+            print(f"  - WARNING: Skipping {sample_dir.name} because the training file is empty or contains no valid data.")
+            continue
         
         n_labels = len(datamodule.label_map)
         print(f"Number of labels in the dataset: {n_labels}")

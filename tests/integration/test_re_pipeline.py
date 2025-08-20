@@ -153,16 +153,24 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
     metrics_output_dir = tmp_path / "output" / "final_metrics_re"
     final_metrics_path = metrics_output_dir / "final_metrics.json"
 
-    # NOTE: The RE metrics calculation is not yet implemented in the unified script.
-    # This test will fail until that logic is added.
-    # For now, we are just testing the file creation.
-    # calculate_metrics(
-    #     prediction_path=str(expected_prediction_file),
-    #     eval_type='finetuned', # This would need to be 'finetuned_re'
-    #     config_path=str(training_config_path),
-    #     output_path=str(final_metrics_path)
-    # )
+    # The main script's function signature requires the test_file path,
+    # even if it's not used by the RE metrics calculator.
+    calculate_metrics(
+        prediction_path=str(expected_prediction_file),
+        eval_type='finetuned_re',
+        config_path=str(training_config_path),
+        output_path=str(final_metrics_path),
+        test_file=str(test_file_path) 
+    )
 
     # --- 7. Assert Final Metrics Outputs ---
-    # assert final_metrics_path.exists(), "Final RE metrics report file was not created."
-    print("--- RE Metrics Calculation test is temporarily skipped. ---")
+    assert final_metrics_path.exists(), "Final RE metrics report file was not created."
+    
+    # Verify the content of the generated metrics report
+    with open(final_metrics_path, 'r') as f:
+        report = json.load(f)
+    
+    assert "describir" in report, "'describir' relation not found in final metrics report."
+    assert "ubicar" in report, "'ubicar' relation not found in final metrics report."
+    assert "weighted avg" in report, "'weighted avg' not found in final metrics report."
+    print("--- RE Metrics Calculation Successful and Report Verified ---")
