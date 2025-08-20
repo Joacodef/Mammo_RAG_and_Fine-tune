@@ -74,7 +74,12 @@ def test_calculate_finetuned_metrics(mock_datamodule, mock_finetuned_predictions
     mock_datamodule.return_value = mock_instance
 
     # --- Act ---
-    report = calculate_finetuned_metrics(mock_finetuned_predictions, mock_ner_config)
+    # Provide a dummy path for test_file, as it's required by the function signature.
+    report = calculate_finetuned_metrics(
+        mock_finetuned_predictions, 
+        mock_ner_config, 
+        test_file="dummy/path/to/test.jsonl"
+    )
 
     # --- Assertions ---
     # Verify that the report has the expected structure from seqeval

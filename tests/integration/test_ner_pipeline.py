@@ -161,12 +161,13 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
         prediction_path=str(expected_prediction_file),
         eval_type='finetuned',
         config_path=str(training_config_path), # The config contains the necessary label map
-        output_path=str(final_metrics_path)
+        output_path=str(final_metrics_path),
+        test_file=str(test_file_path) # Pass the path to the temporary test file
     )
 
     # --- 7. Assert Final Metrics Outputs ---
     assert final_metrics_path.exists(), "Final metrics report file was not created."
-
+    
     # Optionally, check the content of the final report
     with open(final_metrics_path, 'r') as f:
         report = json.load(f)

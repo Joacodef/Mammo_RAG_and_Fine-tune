@@ -36,20 +36,20 @@ def load_predictions(file_path: str) -> list:
     with open(file_path, 'r', encoding='utf-8') as f:
         return [json.loads(line) for line in f]
 
-def calculate_finetuned_metrics(predictions: list, config: dict) -> dict:
+def calculate_finetuned_metrics(predictions: list, config: dict, test_file: str) -> dict:
     """
     Calculates NER metrics for fine-tuned models using seqeval.
 
     Args:
         predictions (list): The list of raw prediction records.
         config (dict): The evaluation configuration, needed for the label map.
+        test_file (str): The path to the test data file.
 
     Returns:
         dict: A classification report dictionary from seqeval.
     """
     # We need a DataModule instance to get the inverse label map
-    # A dummy test_file is provided, but it's not actually used here.
-    datamodule = NERDataModule(config=config, test_file="data/processed/test.jsonl")
+    datamodule = NERDataModule(config=config, test_file=test_file)
     datamodule.setup()
     inv_label_map = {v: k for k, v in datamodule.label_map.items()}
 
@@ -146,7 +146,7 @@ def calculate_rag_metrics(predictions: list) -> dict:
     return report
 
 
-def main(prediction_path: str, eval_type: str, config_path: str, output_path: str):
+def main(prediction_path: str, eval_type: str, config_path: str, output_path: str, test_file: str):
     """
     Main function to calculate and save metrics from a raw prediction file.
     """
@@ -158,7 +158,7 @@ def main(prediction_path: str, eval_type: str, config_path: str, output_path: st
     if eval_type == 'finetuned':
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        report = calculate_finetuned_metrics(predictions, config)
+        report = calculate_finetuned_metrics(predictions, config, test_file)
 
     elif eval_type == 'rag':
         report = calculate_rag_metrics(predictions)
@@ -206,6 +206,12 @@ if __name__ == '__main__':
         help="Path to the evaluation config file (required for 'finetuned' type)."
     )
     parser.add_argument(
+        '--test-file',
+        type=str,
+        default='data/processed/test.jsonl',
+        help="Path to the test data file (required for 'finetuned' type to get the label map)."
+    )
+    parser.add_argument(
         '--output-path',
         type=str,
         required=True,
@@ -213,4 +219,4 @@ if __name__ == '__main__':
     )
     
     args = parser.parse_args()
-    main(args.prediction_path, args.type, args.config_path, args.output_path)
+    main(args.prediction_path, args.type, args.config_path, args.output_path, args.test_file)
