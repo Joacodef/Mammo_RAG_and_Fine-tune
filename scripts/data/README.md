@@ -2,13 +2,16 @@
 
 ## Overview
 
-This directory contains scripts for preparing and sampling data for experiments. The primary script is `generate_partitions.py`, which is designed to create a consistent, stratified holdout test set and multiple, reproducible training samples of various sizes from a single raw dataset.
+This directory contains scripts for preparing all necessary data assets for the experiments. This includes generating stratified training/test sets and building the vector database required for the RAG pipeline.
+
+-----
 
 ## Script: `generate_partitions.py`
 
 ### Purpose
 
 This script automates the creation of data partitions for robust model evaluation. It performs two key functions:
+
 1.  **Global Test Set Creation**: It first splits the entire raw dataset into a global training set and a holdout test set using multi-label stratification. This ensures that all models, regardless of the training data size, are evaluated against the same, representative test data.
 2.  **Stratified Training Samples**: From the global training set, it generates multiple, smaller training partitions of various sizes (e.g., 5, 10, 50 reports). This is essential for evaluating model performance at different data scales.
 
@@ -82,3 +85,39 @@ The data generation process follows these steps:
         │   └── train.jsonl
         └── ...
     ```
+
+-----
+
+## Script: `build_vector_db.py`
+
+### Purpose
+
+This script is responsible for creating the **FAISS vector database**, which is a critical component of the Retrieval-Augmented Generation (RAG) pipeline. It takes a `.jsonl` file of annotated reports, generates a vector embedding for the text of each report using a sentence-transformer model, and saves the resulting index to a file for fast similarity searches.
+
+### Workflow
+
+1.  **Generate Source Data**: Before building the database, you must first run `generate_partitions.py`. The vector database is built using the full training set, which is typically located at `data/processed/train-all/sample-1/train.jsonl`.
+
+2.  **Configure the Database**: The script's behavior is controlled by `configs/rag_config.yaml`. Ensure the `vector_db` section correctly points to the source data file and specifies where the final index should be saved.
+
+    **Example `configs/rag_config.yaml`:**
+
+    ```yaml
+    vector_db:
+      # Path where the FAISS index file will be stored.
+      index_path: "output/vector_db/faiss_index.bin"
+
+      # Path to the source data used to build the vector database.
+      source_data_path: "data/processed/train-all/sample-1/train.jsonl"
+
+      # The name of the sentence-transformer model to use for generating embeddings.
+      embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+    ```
+
+3.  **Execute the Script**: Run the script from the **root directory** of the project. You can optionally use the `--force-rebuild` flag to create a new index even if one already exists.
+
+    ```bash
+    python scripts/data/build_vector_db.py --config-path configs/rag_config.yaml
+    ```
+
+4.  **Review the Output**: The script will create and save the FAISS index file at the `index_path` specified in the configuration. The console will show logs detailing the process, including the number of vectors added to the index.

@@ -15,7 +15,7 @@ The primary objective is to evaluate how the performance of these two approaches
   - **Modular Model Framework**: Allows for easy substitution between locally fine-tuned models and API-based RAG models through a unified interface.
   - **Configuration-Driven Experiments**: Ensures reproducibility and simplifies experiment management for both training and evaluation using YAML configuration files.
   - **Reproducible Data Sampling**: Includes a script to automatically generate multiple, distinct, and stratified data samples for various training set sizes, ensuring balanced label distribution.
-  - **Standardized Evaluation**: Calculates and reports key metrics for both NER (entity-level $F\_1$-score, Precision, Recall using `seqeval`) and RE (classification reports using `scikit-learn`).
+  - **Standardized Evaluation**: Calculates and reports key metrics for NER (entity-level $F\_1$-score, Precision, Recall) using `seqeval`.
   - **Automated Testing**: Integrated with GitHub Actions for continuous integration, running a full suite of unit tests with `pytest` on every push and pull request to the main branch.
 
 -----
@@ -30,6 +30,7 @@ The repository is organized to maintain a clear separation between configuration
 │   └── python-tests.yml
 ├── configs/                  # Experiment configuration files
 │   ├── data_preparation_config.yaml
+│   ├── rag_config.yaml
 │   ├── training_ner_config.yaml
 │   ├── training_re_config.yaml
 │   ├── evaluation_ner_config.yaml
@@ -43,19 +44,27 @@ The repository is organized to maintain a clear separation between configuration
 │           │   └── train.jsonl
 │           └── ...
 ├── output/                   # (Git-ignored) Models, logs, evaluation results, etc.
+├── prompts/                  # Prompt templates for the RAG pipeline
+│   └── ner_rag_prompt.txt
 ├── scripts/                  # High-level scripts to run experiments
 │   ├── data/
-│   │   └── generate_partitions.py
+│   │   ├── generate_partitions.py
+│   │   └── build_vector_db.py
 │   ├── training/
 │   │   ├── run_ner_training.py
 │   │   └── run_re_training.py
 │   └── evaluation/
-│       └── run_evaluation.py
+│       ├── generate_finetuned_predictions.py
+│       ├── generate_rag_predictions.py
+│       └── calculate_final_metrics.py
 ├── src/                      # Source code for the project
 │   ├── data_loader/          # NER and RE dataloaders
-│   ├── models/               # NER and RE model definitions
 │   ├── evaluation/           # Prediction and evaluation logic
-│   └── training/             # Reusable training loop
+│   ├── llm_services/         # Interface for LLM providers (e.g., OpenAI)
+│   ├── models/               # NER and RE model definitions
+│   ├── training/             # Reusable training loop
+│   ├── utils/                # Utility classes (e.g., CostTracker)
+│   └── vector_db/            # Vector database management for RAG
 ├── tests/                    # Unit and integration tests
 │   ├── unit/
 │   └── integration/
@@ -78,92 +87,104 @@ Follow these steps to configure the project environment.
 ### Installation Steps
 
 1.  **Clone the repository:**
-
     ```bash
     git clone https://github.com/Joacodef/Mammo_RAG_and_Fine-tune.git
     cd Mammo_RAG_and_Fine-tune
     ```
-
 2.  **Create and activate a virtual environment:**
     For example, using `conda`:
-
     ```bash
     conda create --name mammo-nlp python=3.11
     conda activate mammo-nlp
     ```
-
 3.  **Install the required dependencies:**
-
     ```bash
     pip install -r requirements.txt
     ```
-
 4.  **Set up environment variables:**
     If you plan to use API-based models (e.g., OpenAI), copy the example environment file.
-
     ```bash
     cp .env_example .env
     ```
-
     Open the newly created `.env` file and add your secret keys (e.g., `OPENAI_API_KEY=...`).
 
 -----
 
 ## Running the Experiments
 
-The entire experimental workflow, from data preparation to evaluation, is executed using command-line scripts.
+The entire experimental workflow is executed using command-line scripts.
 
-### 1\. Generate Data Partitions
+### 1\. Data Preparation
 
-First, generate the stratified training and test sets from your raw data file. Ensure your data is located at `data/raw/all.jsonl` and configure the partitions in `configs/data_preparation_config.yaml`.
+First, prepare the datasets for both fine-tuning and RAG.
 
-```bash
-python scripts/data/generate_partitions.py --config-path configs/data_preparation_config.yaml
-```
+  - **1.1. Generate Data Partitions**
+    Generate the stratified training and test sets from your raw data file. Ensure your data is located at `data/raw/all.jsonl` and configure the partitions in `configs/data_preparation_config.yaml`.
+    ```bash
+    python scripts/data/generate_partitions.py --config-path configs/data_preparation_config.yaml
+    ```
+  - **1.2. Build Vector Database (for RAG)**
+    This step creates the FAISS index from the full training set, which is required for the RAG pipeline.
+    ```bash
+    python scripts/data/build_vector_db.py --config-path configs/rag_config.yaml
+    ```
 
 **For more details, see the [Data Generation README](https://www.google.com/search?q=./scripts/data/README.md)**.
 
-### 2\. Train Models
+### 2\. Model Training and Prediction
 
-Train either NER or RE models across the generated data partitions. The script will iterate through each sample in the specified partition directory (e.g., `data/processed/train-50`).
-
-  - **To run NER training:**
-
+  - **2.1. Train Fine-Tuned Models**
+    Train either NER or RE models across the generated data partitions.
+      - **NER training:**
+        ```bash
+        python scripts/training/run_ner_training.py \
+          --config-path configs/training_ner_config.yaml \
+          --partition-dir data/processed/train-50
+        ```
+      - **RE training:**
+        ```bash
+        python scripts/training/run_re_trainig.py \
+          --config-path configs/training_re_config.yaml \
+          --partition-dir data/processed/train-50
+        ```
+  - **2.2. Generate Predictions with RAG**
+    Run the RAG pipeline on the test set to generate NER predictions.
     ```bash
-    python scripts/training/run_ner_training.py \
-      --config-path configs/training_ner_config.yaml \
-      --partition-dir data/processed/train-50
+    python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_config.yaml
     ```
 
-  - **To run RE training:**
+### 3\. Evaluation
 
+The evaluation is a two-step process: generate raw prediction files, then calculate metrics.
+
+  - **3.1. Generate Predictions for Fine-Tuned Models**
+    Run inference on the test set for all trained model samples in a directory.
     ```bash
-    python scripts/training/run_re_trainig.py \
-      --config-path configs/training_re_config.yaml \
-      --partition-dir data/processed/train-50
+    python scripts/evaluation/generate_finetuned_predictions.py --config-path configs/evaluation_ner_config.yaml
     ```
-
-### 3\. Evaluate Models
-
-After training, run evaluation on the holdout test set. Update the `model_path` in the corresponding evaluation config file (`configs/evaluation_ner_config.yaml` or `configs/evaluation_re_config.yaml`) to point to the trained model you wish to evaluate.
-
-  - **To run NER evaluation:**
-
-    ```bash
-    python scripts/evaluation/run_evaluation.py --config-path configs/evaluation_ner_config.yaml
-    ```
-
-  - **To run RE evaluation:**
-
-    ```bash
-    python scripts/evaluation/run_evaluation.py --config-path configs/evaluation_re_config.yaml
-    ```
+  - **3.2. Calculate Final Metrics**
+    Calculate metrics from the generated prediction files.
+      - **For a fine-tuned model:**
+        ```bash
+        python scripts/evaluation/calculate_final_metrics.py \
+          --prediction-path <path_to_finetuned_predictions.jsonl> \
+          --type finetuned \
+          --config-path configs/evaluation_ner_config.yaml \
+          --output-path <path_to_save_final_metrics.json>
+        ```
+      - **For RAG predictions:**
+        ```bash
+        python scripts/evaluation/calculate_final_metrics.py \
+          --prediction-path <path_to_rag_predictions.jsonl> \
+          --type rag \
+          --output-path <path_to_save_final_metrics.json>
+        ```
 
 -----
 
 ## Testing
 
-The repository includes a suite of unit tests to ensure code quality and correctness. To run the tests locally, execute the following command from the root directory:
+The repository includes a suite of unit and integration tests to ensure code quality and correctness. To run the tests locally, execute the following command from the root directory:
 
 ```bash
 python -m pytest

@@ -26,7 +26,7 @@ This script manages the end-to-end training process for NER models. It initializ
       --partition-dir data/processed/train-50
     ```
 
-3.  **Output**: The script will create a structured output directory for each trained model, for instance: `output/models/bert-base-cased/train-50/sample-1/`, containing the model weights, tokenizer files, and configuration.
+3.  **Output**: The script will create a unique, timestamped directory for the entire run. Each trained model sample will be saved within this directory. For example: `output/models/ner/train-50/20240820_143000/sample-1/`, containing the model weights, tokenizer files, and a copy of the training configuration.
 
 -----
 
