@@ -3,6 +3,7 @@ import yaml
 import json
 from pathlib import Path
 from tqdm import tqdm
+from dotenv import load_dotenv
 
 # Add the project root to the Python path to allow for absolute imports
 import sys
@@ -62,6 +63,8 @@ def main(config_path: str):
     """
     Main function to run the end-to-end RAG prediction pipeline.
     """
+    load_dotenv()
+    
     print("--- Starting RAG Prediction Pipeline ---")
 
     # --- 1. Load Configuration ---

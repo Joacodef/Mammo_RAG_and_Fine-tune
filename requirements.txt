@@ -20,3 +20,4 @@ scikit-learn
 tqdm
 seqeval
 pytest
+python-dotenv

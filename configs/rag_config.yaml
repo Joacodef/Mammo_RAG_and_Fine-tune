@@ -18,7 +18,7 @@ llm:
     # Specifies the exact model to use from the OpenAI API.
     # This can be changed to any compatible model name.
     # Examples: "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"
-    model: "gpt-4o"
+    model: "gpt-4.1-mini-2025-04-14"
 
     # Controls the randomness of the output. Lower values make the model
     # more deterministic and focused.
@@ -41,7 +41,7 @@ vector_db:
 
   # Path to the source data used to build the vector database.
   # This should be the global training set created by generate_partitions.py.
-  source_data_path: "data/processed/train-all/sample-1/train.jsonl"
+  source_data_path: "data/processed/train-5/sample-1/train.jsonl"
 
   # The name of the sentence-transformer model to use for generating embeddings.
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
