@@ -92,7 +92,6 @@ def test_get_ner_prediction_logs_cost(mock_openai_class, base_config, mock_cost_
         completion_tokens=50
     )
 
-
 @patch('src.llm_services.openai_client.openai.OpenAI')
 def test_get_ner_prediction_handles_api_error(mock_openai_class, base_config):
     """
