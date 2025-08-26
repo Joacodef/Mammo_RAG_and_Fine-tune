@@ -18,6 +18,7 @@ langfuse
 pyyaml
 pandas
 scikit-learn
+scikit-multilearn
 tqdm
 seqeval
 pytest
