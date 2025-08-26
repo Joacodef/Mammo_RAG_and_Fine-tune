@@ -4,3 +4,5 @@ output
 
 !scripts/data
 __pycache__
+
+*.code-workspace

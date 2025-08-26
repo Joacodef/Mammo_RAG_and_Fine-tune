@@ -159,7 +159,7 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     # Call the unified metrics calculation script
     calculate_metrics(
         prediction_path=str(expected_prediction_file),
-        eval_type='finetuned',
+        eval_type='finetuned_ner',
         config_path=str(training_config_path), # The config contains the necessary label map
         output_path=str(final_metrics_path),
         test_file=str(test_file_path) # Pass the path to the temporary test file

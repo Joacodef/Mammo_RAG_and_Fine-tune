@@ -75,10 +75,8 @@ def workflow_configs(tmp_path_factory):
             'n_examples': 1,
             'entity_labels': [{'name': 'FIND', 'description': 'A finding.'}]
         },
-        'paths': {
-            'test_file': str(tmp_path / 'processed' / 'test.jsonl'),
-            'output_dir': str(tmp_path / "output/rag_results")
-        }
+        'test_file': str(tmp_path / 'processed' / 'test.jsonl'),
+        'output_dir': str(tmp_path / "output/rag_results")
     }
 
     return {
@@ -87,6 +85,7 @@ def workflow_configs(tmp_path_factory):
         "training": training_config,
         "rag": rag_config
     }
+    
 
 @pytest.fixture(scope="module")
 def setup_workflow_environment(workflow_configs):
@@ -180,7 +179,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     
     # RAG predictions
     generate_rag_predictions_main(config_path=str(rag_config_path))
-    rag_predictions_path = Path(configs["rag"]["paths"]["output_dir"]) / "rag_predictions.jsonl"
+    rag_predictions_path = Path(configs["rag"]["output_dir"]) / "rag_predictions.jsonl"
     assert rag_predictions_path.exists(), "RAG predictions file was not created."
     print("RAG predictions generated.")
 
@@ -203,13 +202,13 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     print("\n--- (5/5) Calculating Final Metrics ---")
     
     # RAG metrics
-    rag_metrics_path = Path(configs["rag"]["paths"]["output_dir"]) / "final_metrics.json"
+    rag_metrics_path = Path(configs["rag"]["output_dir"]) / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(rag_predictions_path),
         eval_type='rag',
         config_path=str(rag_config_path), # Not strictly needed for rag, but good practice
         output_path=str(rag_metrics_path),
-        test_file=configs["rag"]["paths"]["test_file"]
+        test_file=configs["rag"]["test_file"]
     )
     assert rag_metrics_path.exists(), "RAG metrics file was not created."
     print("RAG metrics calculated.")
@@ -218,7 +217,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     finetuned_metrics_path = finetuned_eval_output_dir / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(finetuned_predictions_path),
-        eval_type='finetuned',
+        eval_type='finetuned_ner',
         config_path=str(training_config_path),
         output_path=str(finetuned_metrics_path),
         test_file=configs["data_prep"]["data"]["holdout_test_set_path"]

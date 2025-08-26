@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.llm_services.base_client import BaseLLMClient
-from src.utils.cost_tracker import CostTracker
 
 class OpenAIClient(BaseLLMClient):
     """
@@ -17,7 +16,7 @@ class OpenAIClient(BaseLLMClient):
     the OpenAI API (e.g., GPT-4, GPT-3.5).
     """
 
-    def __init__(self, config: Dict[str, Any], cost_tracker: Optional[CostTracker] = None, api_key: str = None):
+    def __init__(self, config: Dict[str, Any], api_key: str = None):
         """
         Initializes the OpenAI client.
 
@@ -25,8 +24,6 @@ class OpenAIClient(BaseLLMClient):
             config (Dict[str, Any]): A dictionary containing the configuration
                                      for the OpenAI provider, including 'model'
                                      and 'temperature'.
-            cost_tracker (Optional[CostTracker]): An instance of the CostTracker
-                                                  to log API usage and costs.
             api_key (str, optional): The OpenAI API key. If not provided, it will
                                      be read from the OPENAI_API_KEY environment
                                      variable.
@@ -38,49 +35,56 @@ class OpenAIClient(BaseLLMClient):
         self.client = openai.OpenAI(api_key=api_key)
         self.model = config.get("model", "gpt-4o")
         self.temperature = config.get("temperature", 0.1)
-        self.cost_tracker = cost_tracker
 
-    def get_ner_prediction(self, prompt: str) -> List[Dict[str, Any]]:
+    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None) -> List[Dict[str, Any]]:
         """
         Sends a prompt to the OpenAI API and returns the extracted entities.
 
-        If a cost_tracker is configured, this method will also log the token
-        usage and estimated cost of the API call.
+        If a trace object is provided, this method will log the API call
+        as a generation nested within that trace.
 
         Args:
             prompt (str): The fully constructed prompt for the NER task.
+            trace (Optional[Any]): The Langfuse trace object.
 
         Returns:
             List[Dict[str, Any]]: A list of extracted entity dictionaries.
                                   Returns an empty list in case of an API error
                                   or if the response is not valid JSON.
         """
+        generation = None
+        response_content = ""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                temperature=self.temperature,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant designed to return JSON."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                response_format={"type": "json_object"}
-            )
-            
-            # --- Log the request with the CostTracker ---
-            if self.cost_tracker and response.usage:
-                self.cost_tracker.log_request(
+            if trace:
+                with trace.start_as_current_generation(
+                    name="NER Prediction",
                     model=self.model,
-                    prompt_tokens=response.usage.prompt_tokens,
-                    completion_tokens=response.usage.completion_tokens
+                    input=prompt,
+                    metadata={"temperature": self.temperature}
+                ) as generation:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        temperature=self.temperature,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"}
+                    )
+                    response_content = response.choices[0].message.content
+                    generation.update(output=response_content, usage=response.usage)
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    temperature=self.temperature,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
                 )
-            
-            response_content = response.choices[0].message.content
+                response_content = response.choices[0].message.content
+
             response_dict = json.loads(response_content)
             
             for value in response_dict.values():
@@ -90,11 +94,20 @@ class OpenAIClient(BaseLLMClient):
             return []
 
         except openai.APIError as e:
-            print(f"Error: OpenAI API returned an error: {e}")
+            error_message = f"OpenAI API returned an error: {e}"
+            print(f"Error: {error_message}")
+            if generation:
+                generation.update(level='ERROR', status_message=error_message)
             return []
         except json.JSONDecodeError:
-            print(f"Error: Failed to decode JSON from model response: {response.choices[0].message.content}")
+            error_message = f"Failed to decode JSON from model response: {response_content}"
+            print(f"Error: {error_message}")
+            if generation:
+                generation.update(level='ERROR', status_message=error_message)
             return []
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            error_message = f"An unexpected error occurred: {e}"
+            print(f"Error: {error_message}")
+            if generation:
+                generation.update(level='ERROR', status_message=error_message)
             return []

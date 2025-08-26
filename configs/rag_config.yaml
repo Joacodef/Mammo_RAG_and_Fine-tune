@@ -1,7 +1,9 @@
-# [create] configs/rag_config.yaml
 # Configuration for the Retrieval-Augmented Generation (RAG) pipeline.
 # This file centralizes settings for the LLM provider, vector database,
 # and prompting strategies for the NER task.
+
+# Test file
+test_file: "data/processed/test_small.jsonl"
 
 # --- LLM Configuration ---
 llm:

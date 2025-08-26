@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class BaseLLMClient(ABC):
     """
@@ -12,13 +12,15 @@ class BaseLLMClient(ABC):
     """
 
     @abstractmethod
-    def get_ner_prediction(self, prompt: str) -> List[Dict[str, Any]]:
+    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None) -> List[Dict[str, Any]]:
         """
         Sends a prompt to the LLM and returns the extracted entities for an NER task.
 
         Args:
             prompt (str): The fully constructed prompt, including instructions,
                           few-shot examples, and the new text to be analyzed.
+            trace (Optional[Any]): The Langfuse trace object to which this
+                                   generation will be linked.
 
         Returns:
             List[Dict[str, Any]]: A list of extracted entity dictionaries.

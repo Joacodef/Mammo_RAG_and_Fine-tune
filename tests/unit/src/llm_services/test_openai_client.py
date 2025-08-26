@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent))
 
 from src.llm_services.openai_client import OpenAIClient
-from src.utils.cost_tracker import CostTracker
 
 # --- Fixtures for Testing OpenAIClient ---
 
@@ -17,11 +16,6 @@ from src.utils.cost_tracker import CostTracker
 def base_config():
     """Provides a base configuration for the client."""
     return {"model": "test-model", "temperature": 0.5}
-
-@pytest.fixture
-def mock_cost_tracker():
-    """Provides a mock CostTracker instance."""
-    return MagicMock(spec=CostTracker)
 
 @pytest.fixture
 def mock_success_response():
@@ -74,23 +68,6 @@ def test_get_ner_prediction_success(mock_openai_class, base_config, mock_success
     
     assert result == [{"text": "finding", "label": "FIND"}]
     mock_client_instance.chat.completions.create.assert_called_once()
-
-@patch('src.llm_services.openai_client.openai.OpenAI')
-def test_get_ner_prediction_logs_cost(mock_openai_class, base_config, mock_cost_tracker, mock_success_response):
-    """
-    Tests that get_ner_prediction correctly logs the request with the CostTracker.
-    """
-    mock_client_instance = mock_openai_class.return_value
-    mock_client_instance.chat.completions.create.return_value = mock_success_response
-
-    client = OpenAIClient(config=base_config, api_key="test_key", cost_tracker=mock_cost_tracker)
-    client.get_ner_prediction("some prompt")
-    
-    mock_cost_tracker.log_request.assert_called_once_with(
-        model="test-model",
-        prompt_tokens=100,
-        completion_tokens=50
-    )
 
 @patch('src.llm_services.openai_client.openai.OpenAI')
 def test_get_ner_prediction_handles_api_error(mock_openai_class, base_config):

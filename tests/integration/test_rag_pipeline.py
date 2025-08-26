@@ -37,10 +37,8 @@ def rag_integration_config(tmp_path):
                 {'name': 'REG', 'description': 'A region.'}
             ]
         },
-        'paths': {
-            'test_file': str(tmp_path / "data/test_data.jsonl"),
-            'output_dir': str(tmp_path / "output/rag_results")
-        }
+        'test_file': str(tmp_path / "data/test_data.jsonl"),
+        'output_dir': str(tmp_path / "output/rag_results")
     }
     # Create the config file
     config_path = tmp_path / "rag_config.yaml"
@@ -69,7 +67,7 @@ def setup_rag_test_environment(tmp_path, rag_integration_config):
     test_data = [
         {"text": "This is a test report with a finding.", "entities": []}
     ]
-    test_data_path = Path(config['paths']['test_file'])
+    test_data_path = Path(config['test_file'])
     with open(test_data_path, 'w') as f:
         for record in test_data:
             f.write(json.dumps(record) + '\n')
@@ -84,9 +82,9 @@ def setup_rag_test_environment(tmp_path, rag_integration_config):
 
 # --- RAG Integration Test ---
 
-@patch('src.utils.cost_tracker.CostTracker.save_log') # Mock save_log to avoid file I/O
+@patch('langfuse.Langfuse.flush') # Mock the flush method to isolate the test
 @patch('src.llm_services.OpenAIClient')
-def test_rag_prediction_pipeline(mock_openai_client, mock_save_log, setup_rag_test_environment):
+def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_environment):
     """
     Tests the complete RAG prediction pipeline.
     This test mocks the external API call to OpenAI.
@@ -119,7 +117,7 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_save_log, setup_rag_te
         config = yaml.safe_load(f)
     
     # Assert that the prediction file was created
-    output_dir = Path(config['paths']['output_dir'])
+    output_dir = Path(config['output_dir'])
     prediction_file = output_dir / "rag_predictions.jsonl"
     assert prediction_file.exists(), "RAG prediction file was not created."
 
@@ -129,7 +127,7 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_save_log, setup_rag_te
     assert len(predictions) == 1
     assert predictions[0]['predicted_entities'] == mock_api_response_entities
 
-    # Assert that the cost tracker's save method was called once
-    mock_save_log.assert_called_once()
+    # Assert that the langfuse client's flush method was called once
+    mock_flush.assert_called_once()
 
     print("--- RAG Pipeline Test Successful ---")
