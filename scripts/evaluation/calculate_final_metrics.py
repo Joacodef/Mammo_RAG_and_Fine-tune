@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import yaml
 from collections import defaultdict
-from seqeval.metrics import classification_report as ner_classification_report
 from sklearn.metrics import classification_report as sklearn_classification_report
 import numpy as np
 
@@ -11,7 +10,6 @@ import numpy as np
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.data_loader.ner_datamodule import NERDataModule
 from src.data_loader.re_datamodule import REDataModule
 
 def convert_numpy_types(obj):
@@ -34,79 +32,43 @@ def convert_numpy_types(obj):
     return obj
 
 def load_predictions(file_path: str) -> list:
-    """Loads raw prediction records from a .jsonl file."""
+    """Loads prediction records from a .jsonl file."""
     with open(file_path, 'r', encoding='utf-8') as f:
         return [json.loads(line) for line in f]
 
-def calculate_finetuned_metrics(predictions: list, config: dict, test_file: str) -> dict:
+def calculate_ner_metrics(predictions: list) -> dict:
     """
-    Calculates NER metrics for fine-tuned models using seqeval.
+    Calculates NER metrics for any model by comparing sets of entity dictionaries.
+    This function serves as the unified metric calculator for both fine-tuned and RAG models.
 
     Args:
-        predictions (list): The list of raw prediction records.
-        config (dict): The evaluation configuration, needed for the label map.
-        test_file (str): The path to the test data file.
+        predictions (list): The list of prediction records. Each record must contain
+                            'true_entities' and 'predicted_entities' keys.
 
     Returns:
-        dict: A classification report dictionary from seqeval.
-    """
-    # We need a DataModule instance to get the inverse label map
-    datamodule = NERDataModule(config=config, test_file=test_file)
-    datamodule.setup()
-    inv_label_map = {v: k for k, v in datamodule.label_map.items()}
-
-    true_labels_str = []
-    pred_labels_str = []
-
-    for record in predictions:
-        true_labels_str.append([inv_label_map.get(l, "O") for l in record['true_labels']])
-        pred_labels_str.append([inv_label_map.get(p, "O") for p in record['predicted_labels']])
-
-    return ner_classification_report(
-        true_labels_str,
-        pred_labels_str,
-        output_dict=True,
-        zero_division=0
-    )
-
-def calculate_rag_metrics(predictions: list) -> dict:
-    """
-    Calculates NER metrics for RAG models by comparing sets of entities.
-
-    Args:
-        predictions (list): The list of raw prediction records from the RAG pipeline.
-
-    Returns:
-        dict: A classification report dictionary in the same format as seqeval.
+        dict: A classification report dictionary.
     """
     entity_metrics = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0})
 
     for record in predictions:
-        # For true entities, extract the text from the source using offsets
-        true_entities_set = set()
-        for entity in record['true_entities']:
-            text = record['source_text'][entity['start_offset']:entity['end_offset']]
-            true_entities_set.add((text.strip(), entity['label']))
+        # Convert true and predicted entities to sets of tuples for easy comparison
+        true_entities_set = {(e['text'].strip(), e['label']) for e in record['true_entities']}
+        predicted_entities_set = {(e['text'].strip(), e['label']) for e in record['predicted_entities']}
 
-        # Predicted entities are already in the correct format
-        predicted_entities_set = set()
-        for entity in record['predicted_entities']:
-            predicted_entities_set.add((entity['text'].strip(), entity['label']))
-
-        # Calculate TP, FP, FN for this record
+        # Calculate True Positives, False Positives, and False Negatives for this record
         tp = true_entities_set.intersection(predicted_entities_set)
         fp = predicted_entities_set - true_entities_set
         fn = true_entities_set - predicted_entities_set
 
-        # Aggregate stats per entity type
-        for entity in tp:
-            entity_metrics[entity[1]]['tp'] += 1
-        for entity in fp:
-            entity_metrics[entity[1]]['fp'] += 1
-        for entity in fn:
-            entity_metrics[entity[1]]['fn'] += 1
+        # Aggregate statistics per entity type
+        for _, label in tp:
+            entity_metrics[label]['tp'] += 1
+        for _, label in fp:
+            entity_metrics[label]['fp'] += 1
+        for _, label in fn:
+            entity_metrics[label]['fn'] += 1
 
-# Calculate final report
+    # --- Calculate the final report from the aggregated statistics ---
     report = {}
     all_tp, all_fp, all_fn = 0, 0, 0
     total_support = 0
@@ -144,27 +106,12 @@ def calculate_rag_metrics(predictions: list) -> dict:
         'f1-score': micro_f1,
         'support': total_support
     }
-
-    # Calculate macro average (unweighted average of per-class metrics)
-    macro_precision = sum(report[label]['precision'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
-    macro_recall = sum(report[label]['recall'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
-    macro_f1 = sum(report[label]['f1-score'] for label in sorted_labels) / len(sorted_labels) if sorted_labels else 0
-
-    report['macro avg'] = {
-        'precision': macro_precision,
-        'recall': macro_recall,
-        'f1-score': macro_f1,
-        'support': total_support
-    }
-
+    
     # Calculate weighted average (average weighted by support)
-    weighted_precision = sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
-    weighted_recall = sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
     weighted_f1 = sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
-
     report['weighted avg'] = {
-        'precision': weighted_precision,
-        'recall': weighted_recall,
+        'precision': sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'recall': sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
         'f1-score': weighted_f1,
         'support': total_support
     }
@@ -174,59 +121,45 @@ def calculate_rag_metrics(predictions: list) -> dict:
 def calculate_finetuned_re_metrics(predictions: list, config: dict) -> dict:
     """
     Calculates RE metrics for fine-tuned models using scikit-learn.
-
-    Args:
-        predictions (list): The list of raw prediction records.
-        config (dict): The evaluation configuration, needed for the label map.
-
-    Returns:
-        dict: A classification report dictionary from scikit-learn.
+    This function remains unchanged as it handles a different task (Relation Extraction).
     """
     true_labels = [record['true_labels'] for record in predictions]
     pred_labels = [record['predicted_labels'] for record in predictions]
 
     relation_labels = config.get('model', {}).get('relation_labels', [])
-    
-    # Create the integer list of all possible labels. This is the key change.
     label_ids = list(range(len(relation_labels)))
 
     return sklearn_classification_report(
         true_labels,
         pred_labels,
-        labels=label_ids, # Explicitly provide all possible label IDs
+        labels=label_ids,
         target_names=relation_labels,
         output_dict=True,
         zero_division=0
     )
 
-
-
-def main(prediction_path: str, eval_type: str, config_path: str, output_path: str, test_file: str):
+def main(prediction_path: str, eval_type: str, config_path: str, output_path: str):
     """
-    Main function to calculate and save metrics from a raw prediction file.
+    Main function to calculate and save metrics from a prediction file.
     """
     print(f"--- Calculating Metrics for: {prediction_path} ---")
     print(f"Evaluation type: {eval_type}")
 
     predictions = load_predictions(prediction_path)
 
-    if eval_type == 'finetuned_ner':
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        report = calculate_finetuned_metrics(predictions, config, test_file)
+    if eval_type in ['ner', 'rag']:
+        # NER metrics are now calculated using the same universal function
+        report = calculate_ner_metrics(predictions)
 
-    elif eval_type == 'finetuned_re':
+    elif eval_type == 're':
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         report = calculate_finetuned_re_metrics(predictions, config)
 
-    elif eval_type == 'rag':
-        report = calculate_rag_metrics(predictions)
-
     else:
-        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'finetuned_ner', 'finetuned_re', or 'rag'.")
+        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'ner', 'rag', or 're'.")
     
-    # Convert all numpy types in the report to native Python types
+    # Convert all numpy types in the report to native Python types for JSON serialization
     report = convert_numpy_types(report)
     
     # Save the final report
@@ -243,33 +176,26 @@ def main(prediction_path: str, eval_type: str, config_path: str, output_path: st
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Calculate final metrics from raw prediction files."
+        description="Calculate final metrics from prediction files."
     )
     
     parser.add_argument(
         '--prediction-path', 
         type=str, 
         required=True,
-        help='Path to the .jsonl file containing raw predictions.'
+        help='Path to the .jsonl file containing predictions.'
     )
     parser.add_argument(
         '--type',
         type=str,
         required=True,
-        choices=['finetuned_ner', 'finetuned_re', 'rag'],
-        help="The type of model that generated the predictions."
+        choices=['ner', 'rag', 're'],
+        help="The type of task evaluation. Use 'ner' for fine-tuned NER predictions and 'rag' for RAG NER predictions."
     )
     parser.add_argument(
         '--config-path',
         type=str,
-        default='configs/evaluation_ner_config.yaml',
-        help="Path to the evaluation config file (required for 'finetuned' type)."
-    )
-    parser.add_argument(
-        '--test-file',
-        type=str,
-        default='data/processed/test.jsonl',
-        help="Path to the test data file (required for 'finetuned' type to get the label map)."
+        help="Path to the model config file (required for 're' type to get relation labels)."
     )
     parser.add_argument(
         '--output-path',
@@ -279,4 +205,8 @@ if __name__ == '__main__':
     )
     
     args = parser.parse_args()
-    main(args.prediction_path, args.type, args.config_path, args.output_path, args.test_file)
+
+    if args.type == 're' and not args.config_path:
+        parser.error("--config-path is required when --type is 're'")
+
+    main(args.prediction_path, args.type, args.config_path, args.output_path)

@@ -157,10 +157,9 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
     # even if it's not used by the RE metrics calculator.
     calculate_metrics(
         prediction_path=str(expected_prediction_file),
-        eval_type='finetuned_re',
+        eval_type='re',
         config_path=str(training_config_path),
-        output_path=str(final_metrics_path),
-        test_file=str(test_file_path) 
+        output_path=str(final_metrics_path)
     )
 
     # --- 7. Assert Final Metrics Outputs ---

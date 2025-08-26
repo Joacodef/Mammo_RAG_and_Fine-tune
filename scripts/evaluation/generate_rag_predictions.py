@@ -3,8 +3,10 @@ import yaml
 import json
 import os
 import logging
+import shutil
 from pathlib import Path
 from tqdm import tqdm
+from datetime import datetime
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from typing import Any, Optional
@@ -60,15 +62,14 @@ def format_prompt(new_report_text: str, examples: list, entity_definitions: list
     )
     return prompt
 
-def run_predictions(config_path: str, trace: Optional[Any]):
+def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     """
-    Executes the core prediction generation logic. This function is designed
-    to be called from within a Langfuse trace context.
+    Executes the core prediction generation logic.
     
     Args:
         config_path (str): Path to the RAG configuration file.
-        trace (Optional[Any]): The parent Langfuse trace object. If None,
-                               tracing for nested generations is skipped.
+        output_dir (Path): The exact directory where results will be saved.
+        trace (Optional[Any]): The parent Langfuse trace object.
     """
     logging.info("--- Starting RAG Prediction Pipeline ---")
 
@@ -79,7 +80,7 @@ def run_predictions(config_path: str, trace: Optional[Any]):
 
     rag_config = config.get('rag_prompt', {})
     db_config = config.get('vector_db', {})
-    test_file_path = config.get('test_file', 'data/processed/test.jsonl')
+    test_file_path = config.get('test_file')
     prompt_template_path = rag_config.get('prompt_template_path')
 
     if not prompt_template_path:
@@ -115,11 +116,8 @@ def run_predictions(config_path: str, trace: Optional[Any]):
     n_examples_to_retrieve = rag_config.get('n_examples', 3)
     entity_definitions = rag_config.get('entity_labels', [])
 
-    progress_bar = tqdm(test_records, desc="Generating Predictions")
-    for i, record in enumerate(test_records):
-        logging.info(f"Processing record {i+1}/{len(test_records)}.")
-        
-        logging.info("Searching for similar examples in the vector database.")
+    progress_bar = tqdm(test_records, desc="Generating RAG Predictions")
+    for record in progress_bar:
         similar_examples = db_manager.search(
             query_text=record['text'],
             top_k=n_examples_to_retrieve
@@ -131,23 +129,26 @@ def run_predictions(config_path: str, trace: Optional[Any]):
             entity_definitions=entity_definitions,
             prompt_template=prompt_template
         )
-
-        logging.info("Sending prompt to LLM for prediction...")
+        
         predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace)
-        logging.info("Received prediction from LLM.")
+
+        # Reconstruct true entities to include the 'text' key for consistency
+        true_entities_decoded = []
+        for entity in record.get("entities", []):
+            true_entities_decoded.append({
+                "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                "label": entity["label"]
+            })
 
         results.append({
             "source_text": record['text'],
-            "true_entities": record.get('entities', []),
+            "true_entities": true_entities_decoded,
             "predicted_entities": predicted_entities,
             "prompt_used": prompt
         })
 
     # --- 5. Save Results ---
-    output_dir = Path(config.get('output_dir', 'output/rag_results'))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    results_file = output_dir / "rag_predictions.jsonl"
-    
+    results_file = output_dir / "predictions.jsonl"
     logging.info(f"Saving {len(results)} results to {results_file}...")
     with open(results_file, 'w', encoding='utf-8') as f:
         for res in results:
@@ -158,7 +159,7 @@ def run_predictions(config_path: str, trace: Optional[Any]):
 
 def main(config_path: str):
     """
-    Sets up tracing and logging, then runs the main prediction pipeline.
+    Sets up tracing, logging, and output directories, then runs the main prediction pipeline.
     """
     load_dotenv()
 
@@ -167,6 +168,18 @@ def main(config_path: str):
         format="%(asctime)s [%(levelname)s] - %(message)s",
         stream=sys.stdout
     )
+
+    # --- Setup Output Directory ---
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = base_output_dir / "rag" / timestamp
+    run_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"All RAG prediction outputs for this run will be saved in: {run_output_dir}")
+    shutil.copy(config_path, run_output_dir / "rag_config.yaml")
 
     # --- Langfuse Tracing (Optional) ---
     langfuse_client = None
@@ -179,12 +192,12 @@ def main(config_path: str):
     if langfuse_client:
         # Create a single trace that encompasses the entire script run
         with langfuse_client.start_as_current_span(name="RAG_Prediction_Run") as trace:
-            run_predictions(config_path, trace)
+            run_predictions(config_path, run_output_dir, trace)
         # Ensure all buffered data is sent before the script exits
         langfuse_client.flush()
     else:
         # Execute the main logic without a parent trace
-        run_predictions(config_path, None)
+        run_predictions(config_path, run_output_dir, None)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

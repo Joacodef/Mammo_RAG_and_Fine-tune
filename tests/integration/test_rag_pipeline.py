@@ -82,29 +82,25 @@ def setup_rag_test_environment(tmp_path, rag_integration_config):
 
 # --- RAG Integration Test ---
 
-@patch('langfuse.Langfuse.flush') # Mock the flush method to isolate the test
+@patch('scripts.evaluation.generate_rag_predictions.Langfuse')
 @patch('src.llm_services.OpenAIClient')
-def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_environment, monkeypatch):
+def test_rag_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag_test_environment, monkeypatch):
     """
     Tests the complete RAG prediction pipeline.
     This test mocks the external API call to OpenAI.
     """
-    # --- 1. Setup Mock for OpenAI Client ---
-    # Define the simple JSON-serializable list that our mock client should return.
+    # --- 1. Setup Mocks ---
     mock_api_response_entities = [{"text": "a finding", "label": "FIND"}]
-
-    # Simulate an environment where Langfuse is active
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public-key")
 
-    # This is the mock for the client instance itself.
     mock_client_instance = MagicMock()
-
-    # Mock the public method that the script actually calls.
     mock_client_instance.get_ner_prediction.return_value = mock_api_response_entities
-
-    # The factory will now return our correctly configured mock instance.
     mock_openai_client.return_value = mock_client_instance
+    
+    # Mock the Langfuse instance to prevent network calls
+    mock_langfuse_instance = MagicMock()
+    mock_langfuse.return_value = mock_langfuse_instance
 
     config_path = setup_rag_test_environment
 
@@ -120,9 +116,13 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    # Assert that the prediction file was created
+    # Find the timestamped directory created by the script
     output_dir = Path(config['output_dir'])
-    prediction_file = output_dir / "rag_predictions.jsonl"
+    run_dirs = [d for d in (output_dir / "rag").iterdir() if d.is_dir()]
+    assert len(run_dirs) == 1, "Expected a single timestamped RAG output directory."
+    
+    # Check for the correctly named prediction file inside the new directory
+    prediction_file = run_dirs[0] / "predictions.jsonl"
     assert prediction_file.exists(), "RAG prediction file was not created."
 
     # Assert the content of the prediction file
@@ -132,6 +132,6 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_
     assert predictions[0]['predicted_entities'] == mock_api_response_entities
 
     # Assert that the langfuse client's flush method was called once
-    mock_flush.assert_called_once()
+    mock_langfuse_instance.flush.assert_called_once()
 
     print("--- RAG Pipeline Test Successful ---")

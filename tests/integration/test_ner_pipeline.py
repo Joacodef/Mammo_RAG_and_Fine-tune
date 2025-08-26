@@ -61,7 +61,6 @@ def ner_test_data():
 def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, ner_training_data, ner_test_data):
     """
     Tests the complete NER pipeline from training to evaluation.
-
     This test performs the following steps:
     1. Sets up a temporary directory structure with test data and configs.
     2. Runs the main training script on a minimal dataset.
@@ -145,10 +144,12 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     run_prediction_and_save(evaluation_config)
 
     # --- 5. Assert Prediction Outputs ---
-    # The output directory now contains the raw predictions file.
+    # The function saves directly to the output_dir, it does not create a timestamped folder.
     output_dir = Path(evaluation_config['output_dir'])
-    expected_prediction_file = output_dir / f"raw_predictions_{expected_model_dir.name}.jsonl"
-    assert expected_prediction_file.exists(), "Raw prediction file was not created."
+    
+    # The filename was changed from 'raw_predictions' to 'predictions' for the NER task.
+    expected_prediction_file = output_dir / f"predictions_{expected_model_dir.name}.jsonl"
+    assert expected_prediction_file.exists(), "Prediction file was not created."
     print("--- Prediction Generation Successful and Artifacts Verified ---")
 
     # --- 6. Run Metrics Calculation ---
@@ -156,13 +157,12 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     metrics_output_dir = tmp_path / "output" / "final_metrics_ner"
     final_metrics_path = metrics_output_dir / "final_metrics.json"
 
-    # Call the unified metrics calculation script
+    # Call the unified metrics calculation script, removing the obsolete 'test_file' arg.
     calculate_metrics(
         prediction_path=str(expected_prediction_file),
-        eval_type='finetuned_ner',
+        eval_type='ner',
         config_path=str(training_config_path), # The config contains the necessary label map
-        output_path=str(final_metrics_path),
-        test_file=str(test_file_path) # Pass the path to the temporary test file
+        output_path=str(final_metrics_path)
     )
 
     # --- 7. Assert Final Metrics Outputs ---

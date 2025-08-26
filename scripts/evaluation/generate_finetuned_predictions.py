@@ -36,14 +36,96 @@ def convert_numpy_types(obj):
         return obj.tolist()
     return obj
 
+def decode_entities_from_tokens(
+    source_text: str,
+    token_label_ids: list,
+    inv_label_map: dict,
+    tokenizer
+) -> list:
+    """
+    Decodes a sequence of token-level integer labels into a list of entity
+    dictionaries using the BIO scheme.
+
+    Args:
+        source_text (str): The original, untokenized text.
+        token_label_ids (list): The list of predicted integer labels for each token.
+        inv_label_map (dict): A dictionary mapping integer IDs back to BIO labels.
+        tokenizer: The Hugging Face tokenizer instance.
+
+    Returns:
+        list: A list of decoded entity dictionaries, each with 'text' and 'label'.
+    """
+    if not source_text or not token_label_ids:
+        return []
+
+    # Tokenize to get the mapping from tokens back to character offsets
+    tokenization = tokenizer(
+        source_text,
+        return_offsets_mapping=True,
+        max_length=512,
+        truncation=True
+    )
+    offset_mapping = tokenization['offset_mapping']
+
+    reconstructed_entities = []
+    current_entity_offsets = []
+    current_entity_label = None
+
+    # Align labels with the actual tokens, skipping special tokens
+    active_labels = token_label_ids[:len(offset_mapping)]
+
+    for i, label_id in enumerate(active_labels):
+        label_str = inv_label_map.get(label_id, "O")
+        start_char, end_char = offset_mapping[i]
+
+        # Ignore special tokens like [CLS] and [PAD]
+        if end_char == 0:
+            continue
+
+        if label_str.startswith("B-"):
+            # If an entity was being built, finalize and save it
+            if current_entity_label:
+                start = current_entity_offsets[0][0]
+                end = current_entity_offsets[-1][1]
+                entity_text = source_text[start:end]
+                reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+            
+            # Start a new entity
+            current_entity_offsets = [(start_char, end_char)]
+            current_entity_label = label_str.split("-")[1]
+
+        elif label_str.startswith("I-") and current_entity_label == label_str.split("-")[1]:
+            # Continue the current entity
+            current_entity_offsets.append((start_char, end_char))
+
+        else: # O-tag or a B-tag for a different entity
+            if current_entity_label:
+                start = current_entity_offsets[0][0]
+                end = current_entity_offsets[-1][1]
+                entity_text = source_text[start:end]
+                reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+            current_entity_offsets = []
+            current_entity_label = None
+    
+    # Add any lingering entity after the loop finishes
+    if current_entity_label:
+        start = current_entity_offsets[0][0]
+        end = current_entity_offsets[-1][1]
+        entity_text = source_text[start:end]
+        reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+        
+    return reconstructed_entities
+
 def run_prediction_and_save(config):
     """
-    Main function to run predictions on a test set and save the raw outputs.
-    This function no longer calculates metrics.
+    Main function to run predictions on a test set and save the decoded outputs.
     """
     task = config.get('task')
     if task not in ['ner', 're']:
         raise ValueError("Configuration file must specify a 'task': 'ner' or 're'.")
+        
+    if task == 're':
+        print(f"Note: This script is designed for NER entity decoding. The RE task for '{Path(config['model_path']).name}' will save raw integer predictions.")
 
     model_path = config['model_path']
     test_file = config['test_file']
@@ -52,50 +134,72 @@ def run_prediction_and_save(config):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # --- 2. Initialize Task-Specific Modules ---
+    # --- Initialize Task-Specific Modules ---
     if task == 'ner':
         print("Initializing NER components for prediction...")
         datamodule = NERDataModule(config=config, test_file=test_file)
+        inv_label_map = {v: k for k, v in datamodule.label_map.items()}
+        model = BertNerModel(base_model=model_path)
     else: # task == 're'
         print("Initializing RE components for prediction...")
         datamodule = REDataModule(config=config, test_file=test_file)
+        model = REModel(base_model=model_path, tokenizer=datamodule.tokenizer)
     
     datamodule.setup()
     test_loader = datamodule.test_dataloader()
 
-    # --- 3. Initialize Model and Predictor ---
-    if task == 'ner':
-        model = BertNerModel(base_model=model_path)
-    else: # task == 're'
-        model = REModel(base_model=model_path, tokenizer=datamodule.tokenizer)
-
+    # --- Initialize Model and Predictor ---
     print(f"Loading model from: {model_path}")
     predictor = Predictor(model=model, device=device)
 
-    # --- 4. Get Raw Predictions ---
+    # --- Get Raw Predictions ---
     predictions, true_labels, _ = predictor.predict(test_loader, task_type=task)
 
-    # --- 5. Save Raw Outputs ---
-    # We also need the original text to provide full context in the output file.
-    # We load it directly from the test file.
+    # --- Load Source Text and Format Output ---
     with open(test_file, 'r', encoding='utf-8') as f:
         source_records = [json.loads(line) for line in f]
 
     output_data = []
     for i, record in enumerate(source_records):
-        output_data.append(convert_numpy_types({
-            "source_text": record.get("text", ""),
-            "true_labels": true_labels[i],
-            "predicted_labels": predictions[i]
-        }))
+        if task == 'ner':
+            # Reconstruct true entities from the original annotations
+            true_entities_decoded = []
+            for entity in record.get("entities", []):
+                true_entities_decoded.append({
+                    "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                    "label": entity["label"]
+                })
+            
+            # Decode predicted entities from token-level integer predictions
+            predicted_entities_decoded = decode_entities_from_tokens(
+                source_text=record.get("text", ""),
+                token_label_ids=predictions[i],
+                inv_label_map=inv_label_map,
+                tokenizer=datamodule.tokenizer
+            )
 
-    # Save the raw predictions to a file
-    output_filename = output_dir / f"raw_predictions_{Path(model_path).name}.jsonl"
+            output_data.append(convert_numpy_types({
+                "source_text": record.get("text", ""),
+                "true_entities": true_entities_decoded,
+                "predicted_entities": predicted_entities_decoded
+            }))
+        else: # RE task retains the simpler, raw output
+             output_data.append(convert_numpy_types({
+                "source_text": record.get("text", ""),
+                "true_labels": true_labels[i],
+                "predicted_labels": predictions[i]
+            }))
+
+
+    # --- Save Decoded Outputs ---
+    filename_prefix = "predictions" if task == 'ner' else "raw_predictions"
+    output_filename = output_dir / f"{filename_prefix}_{Path(model_path).name}.jsonl"
+
     with open(output_filename, 'w', encoding='utf-8') as f:
         for entry in output_data:
-            f.write(json.dumps(entry) + '\n')
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
-    print(f"\nRaw predictions saved to: {output_filename}")
+    print(f"\nPredictions saved to: {output_filename}")
     print(f"Prediction generation for '{Path(model_path).name}' finished successfully.")
 
 

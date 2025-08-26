@@ -179,7 +179,14 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     
     # RAG predictions
     generate_rag_predictions_main(config_path=str(rag_config_path))
-    rag_predictions_path = Path(configs["rag"]["output_dir"]) / "rag_predictions.jsonl"
+    rag_output_dir = Path(configs["rag"]["output_dir"])
+    
+    # Find the timestamped run directory created by the script
+    rag_run_dirs = [d for d in (rag_output_dir / "rag").iterdir() if d.is_dir()]
+    assert len(rag_run_dirs) == 1, "Expected a single RAG prediction output directory."
+    
+    # The new filename is predictions.jsonl
+    rag_predictions_path = rag_run_dirs[0] / "predictions.jsonl"
     assert rag_predictions_path.exists(), "RAG predictions file was not created."
     print("RAG predictions generated.")
 
@@ -194,7 +201,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
         'batch_size': 1
     }
     run_prediction_and_save(evaluation_config)
-    finetuned_predictions_path = finetuned_eval_output_dir / f"raw_predictions_{trained_model_dir.name}.jsonl"
+    finetuned_predictions_path = finetuned_eval_output_dir / f"predictions_{trained_model_dir.name}.jsonl"
     assert finetuned_predictions_path.exists(), "Fine-tuned predictions file was not created."
     print("Fine-tuned predictions generated.")
 
@@ -202,13 +209,12 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     print("\n--- (5/5) Calculating Final Metrics ---")
     
     # RAG metrics
-    rag_metrics_path = Path(configs["rag"]["output_dir"]) / "final_metrics.json"
+    rag_metrics_path = rag_run_dirs[0] / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(rag_predictions_path),
         eval_type='rag',
-        config_path=str(rag_config_path), # Not strictly needed for rag, but good practice
-        output_path=str(rag_metrics_path),
-        test_file=configs["rag"]["test_file"]
+        config_path=str(rag_config_path),
+        output_path=str(rag_metrics_path)
     )
     assert rag_metrics_path.exists(), "RAG metrics file was not created."
     print("RAG metrics calculated.")
@@ -217,10 +223,9 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     finetuned_metrics_path = finetuned_eval_output_dir / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(finetuned_predictions_path),
-        eval_type='finetuned_ner',
+        eval_type='ner',
         config_path=str(training_config_path),
-        output_path=str(finetuned_metrics_path),
-        test_file=configs["data_prep"]["data"]["holdout_test_set_path"]
+        output_path=str(finetuned_metrics_path)
     )
     assert finetuned_metrics_path.exists(), "Fine-tuned metrics file was not created."
     print("Fine-tuned metrics calculated.")
