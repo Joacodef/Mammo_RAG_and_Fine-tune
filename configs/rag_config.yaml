@@ -3,7 +3,7 @@
 # and prompting strategies for the NER task.
 
 # Test file
-test_file: "data/processed/test_small.jsonl"
+test_file: "data/processed/test.jsonl"
 
 # --- LLM Configuration ---
 llm:
@@ -63,16 +63,16 @@ rag_prompt:
   # guiding the model to make accurate and consistent extractions.
   entity_labels:
     - name: "HALL_presente"
-      description: "A finding or observation explicitly mentioned as present in the mammogram. Example: 'Nódulo', 'Microcalcificaciones'."
+      description: "hallazgos presentes, observaciones de posible importancia patológica. En la gran mayoría de los casos son sólo una palabra, tales como: 'nódulo', 'microcalcificaciones', 'quistes', 'asimetría', etc. En casos particulares, se requiere más de una palabra, como 'clips quirúrgicos' o 'imágenes espiculadas'."
     - name: "HALL_ausente"
-      description: "A finding or observation explicitly mentioned as NOT present. Often follows phrases like 'No se observan' or 'sin'. Example: 'sin adenopatías'."
+      description: "hallazgos ausentes, menciones de hallazgos no presentes, se marca el mismo tipo de palabras que en HALL_presente, pero que hayan sido negadas."
     - name: "CARACT"
-      description: "A characteristic or descriptor of a finding. Example: 'bien delimitado', 'agrupadas', 'espiculado'."
+      description: "características asociadas a hallazgos presentes o ausentes, tales como: 'isodenso', 'agrupadas', 'bordes bien definidos', etc."
     - name: "CUAD"
-      description: "The quadrant of the breast where a finding is located. Example: 'CSE' (cuadrante superoexterno), 'CSI' (cuadrante superointerno)."
+      description: "cuadrante de la mama, tales como: 'cuadrante superior interno', 'cuadrante inferoexterno', etc."
     - name: "LAT"
-      description: "The laterality of the breast. Example: 'derecho', 'izquierda', 'bilateral'."
+      description: "lateralidad de la mama, puede ser 'derecha', 'izquierda', 'bilateral', 'ambas mamas', etc."
     - name: "REG"
-      description: "A specific region or location within the breast. Example: 'periareolar', 'axilar', 'retroareolar'."
+      description: "región de la mama, puede ser 'tercio superior', 'regiones axilares', etc."
     - name: "DENS"
-      description: "A description of the overall breast density. Example: 'mamas densas', 'tejido fibroglandular disperso'."
+      description: "frases que se refieran a características generales de la densidad mamaria."

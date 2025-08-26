@@ -1,13 +1,21 @@
-You are an expert radiologist specializing in mammography report analysis. Your task is to perform Named Entity Recognition.
-From the text below, extract all entities corresponding to the following labels. Format the output as a JSON list of objects, where each object has 'text' and 'label' keys.
+Eres un sistema experto en etiquetar informes radiológicos de mamografías.
+Debes etiquetar el informe usando las siguientes etiquetas:
 
-LABEL DEFINITIONS:
 {entity_definitions}
 
-EXAMPLES:
+No debe haber solapamiento/overlap entre entidades.
+Tu respuesta debe ser una lista con objetos JSON por cada entidad. Cada objeto debe tener las llaves:
+
+- label: la etiqueta asignada a la entidad
+- start_offset : posición del carácter inicial de la entidad
+- end_offset : posición del carácter final de la entidad
+- span_text : texto completo de la entidad
+
+Ejemplos de informes:
+
 {examples}
 
-NEW REPORT TO ANALYZE:
+Ahora, debes aplicar el mismo esquema de etiquetado al siguiente informe:
 ---
-Text: {new_report_text}
-Output:
+Texto: {new_report_text}
+Respuesta:
