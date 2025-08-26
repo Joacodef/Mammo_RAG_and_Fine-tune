@@ -84,7 +84,7 @@ def setup_rag_test_environment(tmp_path, rag_integration_config):
 
 @patch('langfuse.Langfuse.flush') # Mock the flush method to isolate the test
 @patch('src.llm_services.OpenAIClient')
-def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_environment):
+def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_environment, monkeypatch):
     """
     Tests the complete RAG prediction pipeline.
     This test mocks the external API call to OpenAI.
@@ -92,6 +92,10 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_flush, setup_rag_test_
     # --- 1. Setup Mock for OpenAI Client ---
     # Define the simple JSON-serializable list that our mock client should return.
     mock_api_response_entities = [{"text": "a finding", "label": "FIND"}]
+
+    # Simulate an environment where Langfuse is active
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public-key")
 
     # This is the mock for the client instance itself.
     mock_client_instance = MagicMock()
