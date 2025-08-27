@@ -9,7 +9,7 @@ Tu respuesta debe ser una lista con objetos JSON por cada entidad. Cada objeto d
 - label: la etiqueta asignada a la entidad
 - start_offset : posición del carácter inicial de la entidad
 - end_offset : posición del carácter final de la entidad
-- span_text : texto completo de la entidad
+- text : texto completo de la entidad
 
 Ejemplos de informes:
 

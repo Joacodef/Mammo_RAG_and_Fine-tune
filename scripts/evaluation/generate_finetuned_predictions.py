@@ -139,6 +139,8 @@ def run_prediction_and_save(config):
         print("Initializing NER components for prediction...")
         datamodule = NERDataModule(config=config, test_file=test_file)
         inv_label_map = {v: k for k, v in datamodule.label_map.items()}
+        # Create a set of valid entity labels from the configuration for filtering
+        valid_entity_labels = set(config.get('model', {}).get('entity_labels', []))
         model = BertNerModel(base_model=model_path)
     else: # task == 're'
         print("Initializing RE components for prediction...")
@@ -162,13 +164,15 @@ def run_prediction_and_save(config):
     output_data = []
     for i, record in enumerate(source_records):
         if task == 'ner':
-            # Reconstruct true entities from the original annotations
+            # Reconstruct true entities from the original annotations, applying the filter
             true_entities_decoded = []
             for entity in record.get("entities", []):
-                true_entities_decoded.append({
-                    "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                    "label": entity["label"]
-                })
+                # Only include the entity if its label is in the valid set
+                if entity.get("label") in valid_entity_labels:
+                    true_entities_decoded.append({
+                        "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                        "label": entity["label"]
+                    })
             
             # Decode predicted entities from token-level integer predictions
             predicted_entities_decoded = decode_entities_from_tokens(

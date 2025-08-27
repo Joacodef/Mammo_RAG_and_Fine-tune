@@ -2,6 +2,8 @@
 # This file centralizes settings for the LLM provider, vector database,
 # and prompting strategies for the NER task.
 
+"task": "ner"
+
 # Test file
 test_file: "data/processed/test.jsonl"
 

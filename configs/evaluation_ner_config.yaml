@@ -21,7 +21,7 @@ model:
     - "DENS"
 
 # Directory where the evaluation results will be saved.
-output_dir: 'output/evaluation_results/ner'
+output_dir: 'output/finetuned_results/ner'
 
 # Evaluation batch size.
 batch_size: 16

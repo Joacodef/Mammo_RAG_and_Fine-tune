@@ -42,14 +42,19 @@ def format_prompt(new_report_text: str, examples: list, entity_definitions: list
     for entity in entity_definitions:
         entity_definitions_str += f"- nombre: \"{entity['name']}\"\n  descripcion: \"{entity['description']}\"\n"
 
+    # Create a set of valid label names for efficient lookup
+    valid_labels = {entity['name'] for entity in entity_definitions}
+
     # Format the few-shot examples into a string
     examples_str = ""
     for ex in examples:
         # We need to format the entities from the example into the expected JSON output format
         formatted_entities = []
         for e in ex.get("entities", []):
-            entity_text = ex['text'][e['start_offset']:e['end_offset']]
-            formatted_entities.append({"text": entity_text, "label": e["label"], "start_offset": e["start_offset"], "end_offset": e["end_offset"]})
+            # Only include the entity if its label is in the list of valid labels
+            if e["label"] in valid_labels:
+                entity_text = ex['text'][e['start_offset']:e['end_offset']]
+                formatted_entities.append({"text": entity_text, "label": e["label"], "start_offset": e["start_offset"], "end_offset": e["end_offset"]})
 
         entities_json_str = json.dumps(formatted_entities, ensure_ascii=False)
         examples_str += f"---\nText: {ex['text']}\nOutput: {entities_json_str}\n"
@@ -115,6 +120,8 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     results = []
     n_examples_to_retrieve = rag_config.get('n_examples', 3)
     entity_definitions = rag_config.get('entity_labels', [])
+    # Extract the names of the valid entity labels for validation
+    valid_entity_labels = {entity['name'] for entity in entity_definitions}
 
     progress_bar = tqdm(test_records, desc="Generating RAG Predictions")
     for record in progress_bar:
@@ -132,18 +139,28 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
         
         predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace)
 
-        # Reconstruct true entities to include the 'text' key for consistency
+        # --- Validate and Clean LLM Output ---
+        validated_entities = []
+        for entity in predicted_entities:
+            if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
+                validated_entities.append(entity)
+            else:
+                logging.warning(f"Discarding invalid entity from LLM output: {entity}")
+
+        # Reconstruct true entities, filtering to include only those in the config
         true_entities_decoded = []
         for entity in record.get("entities", []):
-            true_entities_decoded.append({
-                "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                "label": entity["label"]
-            })
+            # Only include the true entity if its label is valid
+            if entity.get("label") in valid_entity_labels:
+                true_entities_decoded.append({
+                    "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                    "label": entity["label"]
+                })
 
         results.append({
             "source_text": record['text'],
             "true_entities": true_entities_decoded,
-            "predicted_entities": predicted_entities,
+            "predicted_entities": validated_entities,
             "prompt_used": prompt
         })
 
@@ -172,10 +189,11 @@ def main(config_path: str):
     # --- Setup Output Directory ---
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    
+
+    task = config.get("task", "ner")
     base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_output_dir = base_output_dir / "rag" / timestamp
+    run_output_dir = base_output_dir / task / timestamp
     run_output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"All RAG prediction outputs for this run will be saved in: {run_output_dir}")
