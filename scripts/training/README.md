@@ -26,7 +26,7 @@ This script manages the end-to-end training process for NER models. It initializ
       --partition-dir data/processed/train-50
     ```
 
-3.  **Output**: The script will create a unique, timestamped directory for the entire run. Each trained model sample will be saved within this directory. For example: `output/models/ner/train-50/20240820_143000/sample-1/`, containing the model weights, tokenizer files, and a copy of the training configuration.
+3.  **Output**: The script will create a unique, timestamped directory for the entire run. Each trained model sample will be saved within this directory. For example: `output/models/ner/train-50/20240828_120400/sample-1/`, containing the model weights, tokenizer files, and a copy of the training configuration.
 
 -----
 
@@ -40,12 +40,12 @@ This script manages the training process for RE models. It is structurally simil
 
 1.  **Configure Training**: Ensure the `configs/training_re_config.yaml` file is configured for the RE task.
 
-2.  **Execute the Script**: Run the script from the **root directory**, pointing to the RE configuration and the desired data partition.
+2.  **Execute the Script**: Run the script from the **root directory**, pointing to the RE configuration and the desired data partition. I recommend renaming the script file from `run_re_trainig.py` to `run_re_training.py` to fix the typo.
 
     ```bash
-    python scripts/training/run_re_trainig.py \
+    python scripts/training/run_re_training.py \
       --config-path configs/training_re_config.yaml \
       --partition-dir data/processed/train-50
     ```
 
-3.  **Output**: The script saves the trained RE models to a distinct directory, such as `output/models_re/bert-base-cased/train-50/sample-1/`, to keep them separate from the NER models.
+3.  **Output**: The script creates a unique, timestamped directory for the entire run, inside which each trained model sample will be saved. This prevents accidental overwriting of previous results. For example: `output/models_re/re/train-50/20240828_120729/sample-1/`.

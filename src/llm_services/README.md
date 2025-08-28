@@ -27,7 +27,7 @@ This file defines the `BaseLLMClient` abstract base class. It serves as a strict
 
 ### Key Features
 
--   **Standardized Interface**: It declares the abstract method `get_ner_prediction`, ensuring that every client implementation will have a consistent method for performing NER tasks. This allows any client to be used interchangeably by the application's RAG pipeline.
+-   **Standardized Interface**: It declares the abstract method `get_ner_prediction`, ensuring that every client implementation will have a consistent method for performing NER tasks. This method is designed to accept an optional `trace` object to support observability platforms like Langfuse.
 
 ---
 
@@ -41,5 +41,5 @@ This file provides the concrete implementation, `OpenAIClient`, for interacting 
 
 -   **API Interaction**: Handles all the logic for sending requests to OpenAI's chat completions endpoint, including formatting the messages and specifying the JSON response format.
 -   **Authentication**: Manages the API key, retrieving it either from an environment variable (`OPENAI_API_KEY`) or from a direct argument.
--   **Cost Tracking**: Integrates seamlessly with the `CostTracker` utility. After each successful API call, it logs the number of prompt and completion tokens to monitor usage and estimate costs.
+-   **Observability and Tracing**: Integrates with Langfuse for detailed tracing of LLM calls. The `get_ner_prediction` method can receive a trace object to log the prompt, final response, token usage, and any potential errors as a distinct generation step.
 -   **Robust Error Handling**: Includes `try-except` blocks to gracefully handle potential issues like API errors or JSON decoding failures, preventing them from crashing the prediction pipeline.

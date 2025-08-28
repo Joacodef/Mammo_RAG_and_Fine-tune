@@ -3,7 +3,7 @@
 task: "ner"
 
 # Path to the directory containing the fine-tuned NER model.
-model_dir: 'output/models/ner/train-10/20250813_120919'
+model_dir: 'output/models/ner/train-20/20250826_205315/'
 
 # Path to the test data file (.jsonl format).
 test_file: 'data/processed/test.jsonl' 
