@@ -15,7 +15,7 @@ The primary objective is to evaluate how the performance of these two approaches
   - **Modular Model Framework**: Allows for easy substitution between locally fine-tuned models and API-based RAG models through a unified interface.
   - **Configuration-Driven Experiments**: Ensures reproducibility and simplifies experiment management for both training and evaluation using YAML configuration files.
   - **Reproducible Data Sampling**: Includes a script to automatically generate multiple, distinct, and stratified data samples for various training set sizes, ensuring balanced label distribution.
-  - **Standardized Evaluation**: Calculates and reports key metrics for NER (entity-level $F\_1$-score, Precision, Recall) using `seqeval`.
+  - **Standardized Evaluation**: Calculates and reports key metrics for NER (entity-level $F\_1$-score, Precision, Recall).
   - **Automated Testing**: Integrated with GitHub Actions for continuous integration, running a full suite of unit tests with `pytest` on every push and pull request to the main branch.
 
 -----
@@ -143,7 +143,7 @@ First, prepare the datasets for both fine-tuning and RAG.
         ```
       - **RE training:**
         ```bash
-        python scripts/training/run_re_trainig.py \
+        python scripts/training/run_re_training.py \
           --config-path configs/training_re_config.yaml \
           --partition-dir data/processed/train-50
         ```
@@ -168,7 +168,7 @@ The evaluation is a two-step process: generate raw prediction files, then calcul
         ```bash
         python scripts/evaluation/calculate_final_metrics.py \
           --prediction-path <path_to_finetuned_predictions.jsonl> \
-          --type finetuned \
+          --type ner \
           --config-path configs/evaluation_ner_config.yaml \
           --output-path <path_to_save_final_metrics.json>
         ```
