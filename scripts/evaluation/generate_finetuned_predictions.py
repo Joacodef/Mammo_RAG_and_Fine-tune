@@ -55,7 +55,7 @@ def decode_entities_from_tokens(
     Returns:
         list: A list of decoded entity dictionaries, each with 'text' and 'label'.
     """
-    if not source_text or not token_label_ids:
+    if not source_text or len(token_label_ids) == 0:
         return []
 
     # Tokenize to get the mapping from tokens back to character offsets

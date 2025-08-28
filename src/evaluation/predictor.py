@@ -74,15 +74,16 @@ class Predictor:
                 all_logits.append(batch_logits)
 
                 if task_type == 'ner':
-                    # Align predictions and labels for NER, ignoring padding
+                    # For NER, we need the full prediction sequence for each record
+                    # to align with the tokenizer's full offset mapping later.
+                    all_predictions.extend(list(predictions))
+                    
+                    # For calculating metrics, we still need to align true labels.
                     for i in range(len(true_labels)):
-                        pred_labels_i = []
                         true_labels_i = []
                         for j in range(len(true_labels[i])):
                             if true_labels[i][j] != -100: # Ignore padded tokens
-                                pred_labels_i.append(predictions[i][j])
                                 true_labels_i.append(true_labels[i][j])
-                        all_predictions.append(pred_labels_i)
                         all_true_labels.append(true_labels_i)
                 else: # RE
                     # For RE, labels are simpler (one per instance)

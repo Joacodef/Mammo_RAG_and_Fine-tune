@@ -107,8 +107,8 @@ def test_predict_ner_task(mock_tqdm, mock_ner_model, mock_ner_dataloader, mock_d
 
     # Expected predictions based on mock_ner_model logits
     expected_preds = [
-        [1, 2],       # Predictions for the 2 valid tokens in sample 1
-        [3, 0, 0]     # Predictions for the 3 valid tokens in sample 2
+        [1, 2, 0, 0, 0],  # Full, un-filtered prediction for sample 1
+        [3, 0, 0, 0, 0]   # Full, un-filtered prediction for sample 2
     ]
     
     # Expected true labels based on mock_ner_dataloader, with -100 filtered out
@@ -119,7 +119,8 @@ def test_predict_ner_task(mock_tqdm, mock_ner_model, mock_ner_dataloader, mock_d
 
     assert len(predictions) == 2
     assert len(true_labels) == 2
-    assert predictions == expected_preds
+    predictions_as_list = [p.tolist() for p in predictions]
+    assert predictions_as_list == expected_preds
     assert true_labels == expected_true
 
 @patch('src.evaluation.predictor.tqdm', side_effect=lambda iterable, **kwargs: iterable)

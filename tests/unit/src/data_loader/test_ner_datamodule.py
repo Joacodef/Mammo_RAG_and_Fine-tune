@@ -3,6 +3,8 @@ import torch
 import json
 import warnings
 from unittest.mock import MagicMock, patch
+from transformers import AutoTokenizer
+
 
 import sys
 from pathlib import Path
@@ -24,6 +26,138 @@ def mock_config():
         },
         'batch_size': 2 # For test_dataloader
     }
+
+# Fixture to create a temporary JSONL file for testing
+@pytest.fixture
+def jsonl_file(tmp_path):
+    """
+    Creates a temporary .jsonl file with sample data for tests.
+    """
+    data = [
+        {"text": "Report one with a finding.", "entities": [{"label": "FIND", "start_offset": 18, "end_offset": 25}]},
+        {"text": "Report two, nothing to see here.", "entities": []},
+        {"text": "Report three with an unknown entity.", "entities": [{"label": "UNKNOWN", "start_offset": 19, "end_offset": 33}]}
+    ]
+    file_path = tmp_path / "test_data.jsonl"
+    with open(file_path, 'w', encoding='utf-8') as f:
+        for record in data:
+            f.write(json.dumps(record) + '\n')
+    return file_path
+
+# --- Fixture for Real Tokenizer ---
+
+@pytest.fixture(scope="module")
+def real_tokenizer():
+    """Provides a real tokenizer instance for more accurate offset testing."""
+    return AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+
+# --- Tests for _align_labels ---
+
+def test_align_labels_multi_token_entity(real_tokenizer):
+    """
+    Tests correct BIO labeling for an entity that spans multiple whole tokens.
+    Example: "left breast" -> B-LOC, I-LOC
+    """
+    text = "Nodule in the left breast."
+    entities = [{"label": "LOC", "start_offset": 15, "end_offset": 27}] # "left breast"
+    label_map = {"O": 0, "B-LOC": 1, "I-LOC": 2}
+    
+    tokenization = real_tokenizer(text, return_offsets_mapping=True)
+    offset_mapping = torch.tensor(tokenization['offset_mapping'])
+    
+    dataset = NERDataset.__new__(NERDataset)
+    dataset.label_map = label_map
+    dataset.warned_entities = set()
+    
+    labels = dataset._align_labels(offset_mapping, entities)
+    
+    # Robustly find token indices using character offsets
+    entity_token_indices = []
+    for i, (start, end) in enumerate(offset_mapping):
+        if max(start, 15) < min(end, 27): # Check for overlap with "left breast"
+            entity_token_indices.append(i)
+            
+    assert len(entity_token_indices) >= 2, "Expected 'left breast' to be at least two tokens"
+    assert labels[entity_token_indices[0]] == label_map["B-LOC"]
+    assert labels[entity_token_indices[1]] == label_map["I-LOC"]
+
+def test_align_labels_subword_entity(real_tokenizer):
+    """
+    Tests correct BIO labeling for a word that is broken into subword tokens.
+    All sub-tokens should be correctly labeled B-FIND, I-FIND, ...
+    """
+    text = "Review for microcalcifications."
+    entities = [{"label": "FIND", "start_offset": 11, "end_offset": 30}] # "microcalcifications"
+    label_map = {"O": 0, "B-FIND": 1, "I-FIND": 2}
+
+    tokenization = real_tokenizer(text, return_offsets_mapping=True)
+    offset_mapping = torch.tensor(tokenization['offset_mapping'])
+    
+    dataset = NERDataset.__new__(NERDataset)
+    dataset.label_map = label_map
+    dataset.warned_entities = set()
+    
+    labels = dataset._align_labels(offset_mapping, entities)
+    
+    # Find all tokens that fall within the entity's character span
+    entity_token_indices = []
+    for i, (start, end) in enumerate(offset_mapping):
+        if max(start, 11) < min(end, 30):
+            entity_token_indices.append(i)
+
+    assert len(entity_token_indices) > 1, "Expected 'microcalcifications' to be split into subwords"
+    assert labels[entity_token_indices[0]] == label_map["B-FIND"]
+    for idx in entity_token_indices[1:]:
+        assert labels[idx] == label_map["I-FIND"]
+
+def test_align_labels_consecutive_entities(real_tokenizer):
+    """
+    Tests correct labeling for two distinct entities, handling potential subword tokenization.
+    """
+    text = "A nodule in the left breast."
+    entities = [
+        {"label": "FIND", "start_offset": 2, "end_offset": 8},   # "nodule"
+        {"label": "LOC", "start_offset": 16, "end_offset": 28} # "left breast."
+    ]
+    label_map = {"O": 0, "B-FIND": 1, "I-FIND": 2, "B-LOC": 3, "I-LOC": 4}
+
+    tokenization = real_tokenizer(text, return_offsets_mapping=True)
+    offset_mapping = tokenization['offset_mapping']
+    
+    dataset = NERDataset.__new__(NERDataset)
+    dataset.label_map = label_map
+    dataset.warned_entities = set()
+    
+    labels = dataset._align_labels(torch.tensor(offset_mapping), entities)
+
+    # --- Robustly find token indices using character offsets ---
+    nodule_char_start, nodule_char_end = 2, 8
+    loc_char_start, loc_char_end = 16, 28
+
+    nodule_indices = []
+    left_breast_indices = []
+
+    for i, (start, end) in enumerate(offset_mapping):
+        if start == 0 and end == 0: # Skip special tokens
+            continue
+        if max(start, nodule_char_start) < min(end, nodule_char_end):
+            nodule_indices.append(i)
+        if max(start, loc_char_start) < min(end, loc_char_end):
+            left_breast_indices.append(i)
+
+    # --- Assertions ---
+    # Assert that the entity was found and check the BIO scheme
+    assert len(nodule_indices) > 0, "Expected 'nodule' to map to at least one token"
+    assert labels[nodule_indices[0]] == label_map["B-FIND"]
+    for idx in nodule_indices[1:]:
+        assert labels[idx] == label_map["I-FIND"]
+
+    # Assert that the second entity was found and check the BIO scheme
+    assert len(left_breast_indices) > 0, "Expected 'left breast' to map to at least one token"
+    assert labels[left_breast_indices[0]] == label_map["B-LOC"]
+    for idx in left_breast_indices[1:]:
+        assert labels[idx] == label_map["I-LOC"]
+
 
 @pytest.fixture
 def mock_tokenizer():
@@ -67,22 +201,7 @@ def mock_tokenizer():
         yield tokenizer
 
 
-# Fixture to create a temporary JSONL file for testing
-@pytest.fixture
-def jsonl_file(tmp_path):
-    """
-    Creates a temporary .jsonl file with sample data for tests.
-    """
-    data = [
-        {"text": "Report one with a finding.", "entities": [{"label": "FIND", "start_offset": 18, "end_offset": 25}]},
-        {"text": "Report two, nothing to see here.", "entities": []},
-        {"text": "Report three with an unknown entity.", "entities": [{"label": "UNKNOWN", "start_offset": 19, "end_offset": 33}]}
-    ]
-    file_path = tmp_path / "test_data.jsonl"
-    with open(file_path, 'w', encoding='utf-8') as f:
-        for record in data:
-            f.write(json.dumps(record) + '\n')
-    return file_path
+
 
 # --- Test Cases for NERDataset ---
 
