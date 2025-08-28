@@ -3,6 +3,7 @@ data
 output
 
 !scripts/data
+!tests/unit/scripts/data
 __pycache__
 
 *.code-workspace
