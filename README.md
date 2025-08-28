@@ -129,8 +129,6 @@ First, prepare the datasets for both fine-tuning and RAG.
     python scripts/data/build_vector_db.py --config-path configs/rag_config.yaml
     ```
 
-**For more details, see the [Data Generation README](https://www.google.com/search?q=./scripts/data/README.md)**.
-
 ### 2\. Model Training and Prediction
 
   - **2.1. Train Fine-Tuned Models**
