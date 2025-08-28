@@ -138,64 +138,128 @@ def calculate_finetuned_re_metrics(predictions: list, config: dict) -> dict:
         zero_division=0
     )
 
-def main(prediction_path: str, eval_type: str, config_path: str, output_path: str):
+def aggregate_metrics(reports: list) -> dict:
     """
-    Main function to calculate and save metrics from a prediction file.
-    """
-    print(f"--- Calculating Metrics for: {prediction_path} ---")
-    print(f"Evaluation type: {eval_type}")
+    Aggregates metrics from multiple reports to calculate mean and standard deviation.
 
+    Args:
+        reports (list): A list of classification report dictionaries.
+
+    Returns:
+        dict: A dictionary containing the mean and std dev for key metrics.
+    """
+    if not reports:
+        return {}
+
+    # We focus on the 'weighted avg' as the primary summary statistic
+    key_metrics = ['precision', 'recall', 'f1-score']
+
+    # Extract the weighted average scores from each report
+    weighted_avg_scores = {metric: [] for metric in key_metrics}
+    for report in reports:
+        if 'weighted avg' in report:
+            for metric in key_metrics:
+                weighted_avg_scores[metric].append(report['weighted avg'][metric])
+
+    # Calculate mean and standard deviation for each metric
+    summary = {}
+    for metric in key_metrics:
+        scores = weighted_avg_scores[metric]
+        if scores:
+            summary[metric] = {
+                "mean": np.mean(scores),
+                "std": np.std(scores)
+            }
+
+    return summary
+
+def main(prediction_path: str, prediction_dir: str, eval_type: str, config_path: str, output_path: str):
+    """
+    Main function to calculate and save metrics from a prediction file or directory.
+    """
+    if prediction_dir:
+        print(f"--- Calculating Aggregate Metrics for Directory: {prediction_dir} ---")
+        prediction_files = list(Path(prediction_dir).glob('*.jsonl'))
+        if not prediction_files:
+            raise FileNotFoundError(f"No .jsonl prediction files found in '{prediction_dir}'.")
+
+        print(f"Found {len(prediction_files)} prediction files to process.")
+
+        individual_reports = []
+        for file_path in prediction_files:
+            report = process_single_file(str(file_path), eval_type, config_path)
+            individual_reports.append({
+                "source_file": file_path.name,
+                "report": report
+            })
+
+        aggregate_summary = aggregate_metrics([r['report'] for r in individual_reports])
+
+        final_report = {
+            "aggregate_summary": aggregate_summary,
+            "individual_reports": individual_reports
+        }
+
+    else:
+        print(f"--- Calculating Metrics for File: {prediction_path} ---")
+        final_report = process_single_file(prediction_path, eval_type, config_path)
+
+    # Save the final report
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, 'w') as f:
+        json.dump(final_report, f, indent=4)
+
+    print("\n--- Final Metrics Report ---")
+    print(json.dumps(final_report, indent=4))
+    print(f"\nReport saved successfully to: {output_path}")
+
+
+def process_single_file(prediction_path: str, eval_type: str, config_path: str) -> dict:
+    """Processes a single prediction file and returns its metrics report."""
     predictions = load_predictions(prediction_path)
 
     if eval_type in ['ner', 'rag']:
-        # NER metrics are now calculated using the same universal function
         report = calculate_ner_metrics(predictions)
-
     elif eval_type == 're':
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         report = calculate_finetuned_re_metrics(predictions, config)
-
     else:
         raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'ner', 'rag', or 're'.")
-    
-    # Convert all numpy types in the report to native Python types for JSON serialization
-    report = convert_numpy_types(report)
-    
-    # Save the final report
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_path, 'w') as f:
-        json.dump(report, f, indent=4)
 
-    print("\n--- Final Metrics Report ---")
-    print(json.dumps(report, indent=4))
-    print(f"\nReport saved successfully to: {output_path}")
-
+    return convert_numpy_types(report)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description="Calculate final metrics from prediction files."
+        description="Calculate final metrics from a single prediction file or a directory of files."
     )
-    
-    parser.add_argument(
+
+    # Create a mutually exclusive group for file or directory input
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         '--prediction-path', 
-        type=str, 
-        required=True,
-        help='Path to the .jsonl file containing predictions.'
+        type=str,
+        help='Path to a single .jsonl file containing predictions.'
     )
+    group.add_argument(
+        '--prediction-dir',
+        type=str,
+        help='Path to a directory containing multiple .jsonl prediction files.'
+    )
+
     parser.add_argument(
         '--type',
         type=str,
         required=True,
         choices=['ner', 'rag', 're'],
-        help="The type of task evaluation. Use 'ner' for fine-tuned NER predictions and 'rag' for RAG NER predictions."
+        help="The type of task evaluation."
     )
     parser.add_argument(
         '--config-path',
         type=str,
-        help="Path to the model config file (required for 're' type to get relation labels)."
+        help="Path to the model config file (required for 're' type)."
     )
     parser.add_argument(
         '--output-path',
@@ -203,10 +267,10 @@ if __name__ == '__main__':
         required=True,
         help="Path to save the final JSON metrics report."
     )
-    
+
     args = parser.parse_args()
 
     if args.type == 're' and not args.config_path:
         parser.error("--config-path is required when --type is 're'")
 
-    main(args.prediction_path, args.type, args.config_path, args.output_path)
+    main(args.prediction_path, args.prediction_dir, args.type, args.config_path, args.output_path)

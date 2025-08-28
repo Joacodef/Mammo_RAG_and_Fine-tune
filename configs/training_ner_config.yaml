@@ -17,7 +17,7 @@ trainer:
 model:
   # Hugging Face model identifier for a pre-trained model.
   # This can be a model from the hub (e.g., "bert-base-cased") or a local path.
-  base_model: "bert-base-cased"
+  base_model: "dccuchile/bert-base-spanish-wwm-cased"
 
   # A list of the distinct entity types in your dataset.
   # The data loader will automatically create B- and I- tags for these.
