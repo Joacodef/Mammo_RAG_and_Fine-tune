@@ -8,7 +8,7 @@ import sys
 # Add the project root to the Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from scripts.training.run_re_trainig import run_batch_re_training
+from scripts.training.run_re_training import run_batch_re_training
 from scripts.evaluation.generate_finetuned_predictions import run_prediction_and_save
 from scripts.evaluation.calculate_final_metrics import main as calculate_metrics
 
@@ -115,9 +115,15 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
         partition_dir=str(tmp_path / "processed_re" / "train-2")
     )
 
-    # --- 3. Assert Training Outputs ---
-    model_name = re_integration_config['model']['base_model'].replace("/", "_")
-    expected_model_dir = Path(re_integration_config['paths']['output_dir']) / model_name / "train-2" / "sample-1"
+    # The output path now includes a timestamp, so we must find it dynamically.
+    base_output_dir = Path(re_integration_config['paths']['output_dir']) / "re" / "train-2"
+
+    # Find the single timestamped directory created by the training run
+    timestamp_dirs = [d for d in base_output_dir.iterdir() if d.is_dir()]
+    assert len(timestamp_dirs) == 1, "Expected a single timestamped output directory for the RE training run."
+
+    # Define the final path to the specific sample model
+    expected_model_dir = timestamp_dirs[0] / "sample-1"
     
     assert expected_model_dir.exists(), "RE Model output directory was not created."
     weights_file_exists = (

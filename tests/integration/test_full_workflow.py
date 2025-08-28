@@ -182,7 +182,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     rag_output_dir = Path(configs["rag"]["output_dir"])
     
     # Find the timestamped run directory created by the script
-    rag_run_dirs = [d for d in (rag_output_dir / "rag").iterdir() if d.is_dir()]
+    rag_run_dirs = [d for d in (rag_output_dir / "ner").iterdir() if d.is_dir()]
     assert len(rag_run_dirs) == 1, "Expected a single RAG prediction output directory."
     
     # The new filename is predictions.jsonl

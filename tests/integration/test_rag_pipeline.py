@@ -118,7 +118,7 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag_te
     
     # Find the timestamped directory created by the script
     output_dir = Path(config['output_dir'])
-    run_dirs = [d for d in (output_dir / "rag").iterdir() if d.is_dir()]
+    run_dirs = [d for d in (output_dir / "ner").iterdir() if d.is_dir()]
     assert len(run_dirs) == 1, "Expected a single timestamped RAG output directory."
     
     # Check for the correctly named prediction file inside the new directory
