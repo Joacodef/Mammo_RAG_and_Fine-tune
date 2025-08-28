@@ -23,6 +23,46 @@ This module is designed for **token-level classification** tasks. It reads text 
 -   **Dynamic Label Mapping**: Constructs a label-to-ID map from the list of entity types provided in the configuration, ensuring flexibility.
 -   **Robust Validation**: Includes checks to handle records with missing or malformed entities and warns the user about entity labels present in the data but not specified in the configuration.
 
+### Example Workflow
+
+The main challenge in NER is to convert character-level entity spans into token-level labels, especially when words are split into subword tokens.
+
+1.  **Original Data (`.jsonl` line)**
+    The input is a JSON object with the text and the start/end character positions of an entity.
+
+    ```json
+    {
+      "text": "Review for microcalcifications.",
+      "entities": [
+        {"label": "FIND", "start_offset": 11, "end_offset": 30}
+      ]
+    }
+    ```
+
+2.  **Tokenization**
+    The tokenizer may split a single word into multiple subword tokens. The `offset_mapping` keeps track of the original character span for each token.
+
+    * Original Word: `microcalcifications`
+    * Tokens: `['[CLS]', 'review', 'for', 'micro', '##ca', '##lci', '##fic', '##ations', '.', '[SEP]']`
+
+3.  **Label Alignment**
+    Using the character offsets, the dataloader assigns the correct BIO label to each token. The first token of the entity gets the `B-` (Beginning) tag, and all subsequent subword tokens of the same entity get the `I-` (Inside) tag.
+
+    | Token | Label |
+    | :--- | :--- |
+    | `[CLS]` | -100 |
+    | `review` | O |
+    | `for` | O |
+    | `micro` | B-FIND |
+    | `##ca` | I-FIND |
+    | `##lci` | I-FIND |
+    | `##fic` | I-FIND |
+    | `##ations` | I-FIND |
+    | `.` | O |
+    | `[SEP]` | -100 |
+
+This aligned list of labels is then converted to integer IDs and passed to the model for training.
+
 ---
 
 ## `re_datamodule.py`
@@ -34,6 +74,37 @@ This module is tailored for **sequence-level classification** to identify relati
 ### Key Features
 
 -   **Entity Pair Generation**: Creates all possible ordered pairs of entities within a single text record (`itertools.permutations`), generating a distinct training instance for each pair.
--   **Special Token Markers**: Inserts special tokens (e.g., `[E1_START]`, `[E1_END]`, `[E2_START]`, `[E2_END]`) around the head and tail entities of a pair to provide strong positional signals to the model.
+-   **Special Token Markers**: Inserts special tokens (e.g., `[E1_START]`, `[E1_END]`, `[E2_START]`, `[E2_END]`) around the head and tail entities of a pair. This provides strong, explicit positional signals to the model, helping it focus on the relationship between the two marked entities.
 -   **"No\_Relation" Handling**: Assigns a "No\_Relation" label to entity pairs that are not explicitly related in the dataset, allowing the model to learn to distinguish between related and unrelated pairs.
 -   **Configuration-Driven Filtering**: Ignores relation types found in the data but not defined in the configuration `relation_labels`, issuing a warning to the user.
+
+### Example Workflow
+
+To understand how the special tokens are used, consider the following record:
+
+1.  **Original Data (`.jsonl` line)**
+    The input is a single line of JSON containing the text and entity annotations.
+
+    ```json
+    {
+      "text": "Nódulo en mama derecha.",
+      "entities": [
+        {"id": 1, "label": "HALL", "start_offset": 0, "end_offset": 6},
+        {"id": 2, "label": "REG", "start_offset": 10, "end_offset": 22}
+      ],
+      "relations": [
+        {"from_id": 1, "to_id": 2, "type": "ubicar"}
+      ]
+    }
+    ```
+
+2.  **Instance Creation**
+    The dataloader creates an instance for each potential relationship. Let's consider the pair where "Nódulo" is the head entity (E1) and "mama derecha" is the tail entity (E2).
+
+3.  **Marker Insertion**
+    Before tokenization, special markers are inserted into the raw text to bracket the head and tail entities for this specific instance.
+
+    * Original Text: `Nódulo en mama derecha.`
+    * Marked Text for Model: `[E1_START]Nódulo[E1_END] en [E2_START]mama derecha[E2_END].`
+
+This new, marked string is then passed to the tokenizer. The model learns to use the `[E1_START]...[E2_END]` markers to understand which pair of entities it should classify for the `ubicar` relationship.
