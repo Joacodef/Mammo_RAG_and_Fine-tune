@@ -120,20 +120,28 @@ def calculate_ner_metrics(predictions: list) -> dict:
 
 def calculate_finetuned_re_metrics(predictions: list, config: dict) -> dict:
     """
-    Calculates RE metrics for fine-tuned models using scikit-learn.
-    This function remains unchanged as it handles a different task (Relation Extraction).
+    Calculates RE metrics for fine-tuned models, ignoring the 'No_Relation' class.
     """
-    true_labels = [record['true_labels'] for record in predictions]
-    pred_labels = [record['predicted_labels'] for record in predictions]
+    # Flatten the lists of labels from all records, as each record contains multiple instances.
+    true_labels_flat = [label for record in predictions for label in record.get('true_labels', [])]
+    pred_labels_flat = [label for record in predictions for label in record.get('predicted_labels', [])]
 
-    relation_labels = config.get('model', {}).get('relation_labels', [])
-    label_ids = list(range(len(relation_labels)))
+    # Get the full list of relation labels from the config to build the correct mapping
+    all_relation_labels = config.get('model', {}).get('relation_labels', [])
+    if not all_relation_labels:
+        return {} # Return empty report if no labels are defined
+
+    relation_map = {label: i for i, label in enumerate(all_relation_labels)}
+
+    # Determine which labels to include in the report (all except 'No_Relation')
+    labels_to_include = [label for label in all_relation_labels if label != "No_Relation"]
+    label_ids_to_include = [relation_map[label] for label in labels_to_include]
 
     return sklearn_classification_report(
-        true_labels,
-        pred_labels,
-        labels=label_ids,
-        target_names=relation_labels,
+        true_labels_flat,
+        pred_labels_flat,
+        labels=label_ids_to_include,
+        target_names=labels_to_include,
         output_dict=True,
         zero_division=0
     )

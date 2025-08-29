@@ -3,19 +3,21 @@
 task: "re"
 
 # Path to the directory containing the fine-tuned RE model.
-model_path: 'output/models_re/bert-base-cased/train-50/sample-1'
+model_dir: 'output/models/re/train-5/20250828_221542/'
 
 # Path to the test data file (.jsonl format).
 test_file: 'data/processed/test.jsonl'
 
 # A list of the distinct relation types for the RE model.
 # This must match the configuration used during training.
-relation_labels:
-  - "describir"
-  - "ubicar"
+model:
+  relation_labels:
+    - "describir"
+    - "ubicar"
+    - "No_Relation"
 
 # Directory where the evaluation results will be saved.
-output_dir: 'output/evaluation_results/re'
+output_dir: 'output/finetuned_results/re'
 
 # Evaluation batch size.
 batch_size: 16

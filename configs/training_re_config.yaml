@@ -5,7 +5,7 @@ seed: 42
 
 # Training settings
 trainer:
-  n_epochs: 5
+  n_epochs: 10
   batch_size: 16 # Batch size can often be larger for RE
   learning_rate: 2e-5
   gradient_accumulation_steps: 1
@@ -16,7 +16,7 @@ trainer:
 # Model configuration
 model:
   # Hugging Face model identifier for a pre-trained model.
-  base_model: "bert-base-cased"
+  base_model: "dccuchile/bert-base-spanish-wwm-cased"
 
   # A list of the distinct relation types in your dataset.
   # The data loader will map these to integer IDs.
@@ -24,6 +24,7 @@ model:
   relation_labels:
     - "describir"
     - "ubicar"
+    - "No_Relation"
     
 # Paths and directories
 paths:
@@ -34,4 +35,4 @@ paths:
 
   # Directory where the final trained RE model will be saved.
   # Models are saved in a separate directory to distinguish them from NER models.
-  output_dir: "output/models_re"
+  output_dir: "output/models"

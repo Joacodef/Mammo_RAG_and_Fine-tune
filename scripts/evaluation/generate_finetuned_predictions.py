@@ -6,6 +6,7 @@ import torch
 import shutil
 from datetime import datetime
 import numpy as np
+import itertools
 
 # Add the project root to the Python path
 import sys
@@ -162,19 +163,17 @@ def run_prediction_and_save(config):
         source_records = [json.loads(line) for line in f]
 
     output_data = []
-    for i, record in enumerate(source_records):
-        if task == 'ner':
-            # Reconstruct true entities from the original annotations, applying the filter
+    if task == 'ner':
+        # NER task maintains its one-to-one logic
+        for i, record in enumerate(source_records):
             true_entities_decoded = []
             for entity in record.get("entities", []):
-                # Only include the entity if its label is in the valid set
                 if entity.get("label") in valid_entity_labels:
                     true_entities_decoded.append({
                         "text": record["text"][entity["start_offset"]:entity["end_offset"]],
                         "label": entity["label"]
                     })
-            
-            # Decode predicted entities from token-level integer predictions
+
             predicted_entities_decoded = decode_entities_from_tokens(
                 source_text=record.get("text", ""),
                 token_label_ids=predictions[i],
@@ -187,12 +186,32 @@ def run_prediction_and_save(config):
                 "true_entities": true_entities_decoded,
                 "predicted_entities": predicted_entities_decoded
             }))
-        else: # RE task retains the simpler, raw output
-             output_data.append(convert_numpy_types({
+    else: # RE task now correctly groups instances by source text
+        instance_idx = 0
+        for record in source_records:
+            # To correctly map the flat list of predictions back to the source record,
+            # we must recalculate how many valid instances this record generates.
+            num_instances_for_record = 0
+            relation_map = datamodule.relation_map
+            relations = record.get("relations", [])
+            relation_lookup = {(rel["from_id"], rel["to_id"]): rel["type"] for rel in relations}
+
+            for head, tail in itertools.permutations(record.get("entities", []), 2):
+                relation_type = relation_lookup.get((head["id"], tail["id"]), "No_Relation")
+                if relation_type in relation_map:
+                    num_instances_for_record += 1
+
+            # Slice the predictions and labels for the current source record
+            record_predictions = predictions[instance_idx : instance_idx + num_instances_for_record]
+            record_true_labels = true_labels[instance_idx : instance_idx + num_instances_for_record]
+
+            # For RE, we now save a list of predictions for each source text
+            output_data.append(convert_numpy_types({
                 "source_text": record.get("text", ""),
-                "true_labels": true_labels[i],
-                "predicted_labels": predictions[i]
+                "true_labels": record_true_labels,
+                "predicted_labels": record_predictions
             }))
+            instance_idx += num_instances_for_record
 
 
     # --- Save Decoded Outputs ---
