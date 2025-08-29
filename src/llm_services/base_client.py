@@ -12,7 +12,7 @@ class BaseLLMClient(ABC):
     """
 
     @abstractmethod
-    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None) -> List[Dict[str, Any]]:
+    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
         """
         Sends a prompt to the LLM and returns the extracted entities for an NER task.
 
@@ -21,6 +21,7 @@ class BaseLLMClient(ABC):
                           few-shot examples, and the new text to be analyzed.
             trace (Optional[Any]): The Langfuse trace object to which this
                                    generation will be linked.
+            report_index (int, optional): The index of the report in the test set for tracing.
 
         Returns:
             List[Dict[str, Any]]: A list of extracted entity dictionaries.

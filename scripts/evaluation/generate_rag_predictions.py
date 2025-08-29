@@ -132,6 +132,7 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
         logging.info(f"Skipping {len(completed_texts)} already processed records.")
     
     logging.info(f"Total records to process in this run: {len(records_to_process)}.")
+    all_test_texts = [rec['text'] for rec in all_test_records]
 
     # --- 4. Process Each Test Record and Save Incrementally ---
     n_examples_to_retrieve = rag_config.get('n_examples', 3)
@@ -142,10 +143,17 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     with open(results_file, 'a', encoding='utf-8') as f_out:
         progress_bar = tqdm(records_to_process, desc="Generating RAG Predictions")
         for record in progress_bar:
-            similar_examples = db_manager.search(
-                query_text=record['text'],
-                top_k=n_examples_to_retrieve
-            )
+            try:
+                report_index = all_test_texts.index(record['text'])
+            except ValueError:
+                report_index = -1 # Fallback in case the record text isn't found
+            if n_examples_to_retrieve > 0:
+                similar_examples = db_manager.search(
+                    query_text=record['text'],
+                    top_k=n_examples_to_retrieve
+                )
+            else:
+                similar_examples = []
 
             prompt = format_prompt(
                 new_report_text=record['text'],
@@ -154,7 +162,7 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
                 prompt_template=prompt_template
             )
             
-            predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace)
+            predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace, report_index=report_index)
 
             # Validate and Clean LLM Output
             validated_entities = []
@@ -223,12 +231,29 @@ def main(config_path: str, resume_dir: Optional[str] = None):
     if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
         logging.info("Langfuse environment variables found. Initializing Langfuse client.")
         langfuse_client = Langfuse()
+        # Extract details for a more descriptive trace name
+        n_examples = config.get('rag_prompt', {}).get('n_examples', 0)
+        source_data_path = Path(config.get('vector_db', {}).get('source_data_path', ''))
+
+        # Extract the parent directory name (e.g., 'train-5', 'train-100')
+        db_size_name = source_data_path.parent.parent.name if source_data_path else "unknown_db"
+
+        shot_type = f"{n_examples}-shot"
+
+        trace_name = f"RAG Prediction Run - {db_size_name} - {shot_type}"
+
+        trace_metadata = {
+            "db_size": db_size_name,
+            "shot_type": shot_type,
+            "n_examples": n_examples,
+            "config_path": config_path
+        }
     else:
         logging.info("Langfuse environment variables not set. Proceeding without Langfuse tracing.")
 
     if langfuse_client:
         # Create a single trace that encompasses the entire script run
-        with langfuse_client.start_as_current_span(name="RAG_Prediction_Run") as trace:
+        with langfuse_client.start_as_current_span(name=trace_name, metadata=trace_metadata) as trace:
             run_predictions(config_path, run_output_dir, trace)
         # Ensure all buffered data is sent before the script exits
         langfuse_client.flush()

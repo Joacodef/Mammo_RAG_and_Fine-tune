@@ -41,7 +41,7 @@ class OpenAIClient(BaseLLMClient):
         self.initial_timeout = request_settings.get("initial_timeout_seconds", 20)
         self.backoff_factor = request_settings.get("backoff_factor", 1.5)
 
-    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None) -> List[Dict[str, Any]]:
+    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
         """
         Sends a prompt to the OpenAI API and returns the extracted entities.
 
@@ -51,6 +51,7 @@ class OpenAIClient(BaseLLMClient):
         Args:
             prompt (str): The fully constructed prompt for the NER task.
             trace (Optional[Any]): The Langfuse trace object.
+            report_index (int, optional): The index of the report in the test set for tracing.
 
         Returns:
             List[Dict[str, Any]]: A list of extracted entity dictionaries.
@@ -65,7 +66,7 @@ class OpenAIClient(BaseLLMClient):
             try:
                 if trace:
                     with trace.start_as_current_generation(
-                        name=f"NER Prediction (Attempt {attempt + 1})",
+                        name=f"NER Prediction (Report {report_index}, Attempt {attempt + 1})" if report_index != -1 else f"NER Prediction (Attempt {attempt + 1})",
                         model=self.model,
                         input=prompt,
                         metadata={"temperature": self.temperature, "timeout": current_timeout}
