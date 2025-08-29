@@ -18,6 +18,8 @@ llm:
 
   # Settings for the OpenAI client.
   # These are used only when provider is set to "openai".
+  # Settings for the OpenAI client.
+  # These are used only when provider is set to "openai".
   openai:
     # Specifies the exact model to use from the OpenAI API.
     # This can be changed to any compatible model name.
@@ -27,6 +29,17 @@ llm:
     # Controls the randomness of the output. Lower values make the model
     # more deterministic and focused.
     temperature: 0.1
+
+    # --- Start of new lines to add ---
+    # Settings for handling API requests, including timeouts and retries.
+    request_settings:
+      # The maximum number of times to retry a request if it times out.
+      max_retries: 3
+      # The initial timeout in seconds for the first API call attempt.
+      initial_timeout_seconds: 60
+      # The multiplier to increase the timeout for each subsequent retry.
+      # e.g., 1.5 means the next timeout will be 1.5x the previous one.
+      backoff_factor: 1.5
 
   # Settings for a future AWS SageMaker client.
   # These are used only when provider is set to "aws_sagemaker".
@@ -41,7 +54,7 @@ llm:
 # --- Vector Database Configuration ---
 vector_db:
   # Path where the FAISS index file will be stored.
-  index_path: "output/vector_db/faiss_index.bin"
+  index_path: "output/vector_db/faiss_index_0.bin"
 
   # Path to the source data used to build the vector database.
   # This should be the global training set created by generate_partitions.py.
@@ -54,11 +67,11 @@ vector_db:
 # --- RAG Prompting Configuration ---
 rag_prompt:
   # Path to the text file containing the prompt template.
-  prompt_template_path: "prompts/ner_rag_prompt.txt"
+  prompt_template_path: "prompts/ner_rag_prompt_spanish.txt"
   
   # The number of similar examples to retrieve from the vector database
   # to include in the few-shot prompt.
-  n_examples: 3
+  n_examples: 0
 
   # The list of entity labels to be extracted by the LLM.
   # Providing a clear name and description for each label is crucial for

@@ -1,6 +1,6 @@
 import os
 import json
-import openai
+from openai import OpenAI, APIError, APITimeoutError
 from typing import List, Dict, Any, Optional
 
 # Add the project root to the Python path to allow for absolute imports
@@ -32,9 +32,14 @@ class OpenAIClient(BaseLLMClient):
         if not api_key:
             raise ValueError("OpenAI API key must be provided or set as an environment variable (OPENAI_API_KEY).")
         
-        self.client = openai.OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key)
         self.model = config.get("model", "gpt-4o")
         self.temperature = config.get("temperature", 0.1)
+
+        request_settings = config.get("request_settings", {})
+        self.max_retries = request_settings.get("max_retries", 3)
+        self.initial_timeout = request_settings.get("initial_timeout_seconds", 20)
+        self.backoff_factor = request_settings.get("backoff_factor", 1.5)
 
     def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None) -> List[Dict[str, Any]]:
         """
@@ -54,14 +59,30 @@ class OpenAIClient(BaseLLMClient):
         """
         generation = None
         response_content = ""
-        try:
-            if trace:
-                with trace.start_as_current_generation(
-                    name="NER Prediction",
-                    model=self.model,
-                    input=prompt,
-                    metadata={"temperature": self.temperature}
-                ) as generation:
+        current_timeout = self.initial_timeout
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                if trace:
+                    with trace.start_as_current_generation(
+                        name=f"NER Prediction (Attempt {attempt + 1})",
+                        model=self.model,
+                        input=prompt,
+                        metadata={"temperature": self.temperature, "timeout": current_timeout}
+                    ) as generation:
+                        response = self.client.chat.completions.create(
+                            model=self.model,
+                            temperature=self.temperature,
+                            messages=[
+                                {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            response_format={"type": "json_object"},
+                            timeout=current_timeout
+                        )
+                        response_content = response.choices[0].message.content
+                        generation.update(output=response_content, usage=response.usage)
+                else:
                     response = self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature,
@@ -69,45 +90,47 @@ class OpenAIClient(BaseLLMClient):
                             {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        response_format={"type": "json_object"}
+                        response_format={"type": "json_object"},
+                        timeout=current_timeout
                     )
                     response_content = response.choices[0].message.content
-                    generation.update(output=response_content, usage=response.usage)
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    temperature=self.temperature,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"}
-                )
-                response_content = response.choices[0].message.content
 
-            response_dict = json.loads(response_content)
-            
-            for value in response_dict.values():
-                if isinstance(value, list):
-                    return value
-            
-            return []
+                response_dict = json.loads(response_content)
+                
+                for value in response_dict.values():
+                    if isinstance(value, list):
+                        return value
+                
+                return [] # Return empty if JSON is valid but doesn't contain a list
 
-        except openai.APIError as e:
-            error_message = f"OpenAI API returned an error: {e}"
-            print(f"Error: {error_message}")
-            if generation:
-                generation.update(level='ERROR', status_message=error_message)
-            return []
-        except json.JSONDecodeError:
-            error_message = f"Failed to decode JSON from model response: {response_content}"
-            print(f"Error: {error_message}")
-            if generation:
-                generation.update(level='ERROR', status_message=error_message)
-            return []
-        except Exception as e:
-            error_message = f"An unexpected error occurred: {e}"
-            print(f"Error: {error_message}")
-            if generation:
-                generation.update(level='ERROR', status_message=error_message)
-            return []
+            except APITimeoutError:
+                error_message = f"OpenAI API request timed out after {current_timeout:.2f} seconds. Retrying... (Attempt {attempt + 2}/{self.max_retries + 1})"
+                print(f"Warning: {error_message}")
+                if generation:
+                    generation.update(level='WARNING', status_message=error_message)
+                
+                # Increase timeout for the next attempt
+                current_timeout *= self.backoff_factor
+                continue # Go to the next iteration of the loop
+
+            except APIError as e:
+                error_message = f"OpenAI API returned an error: {e}"
+                print(f"Error: {error_message}")
+                if generation:
+                    generation.update(level='ERROR', status_message=error_message)
+                return []
+            except json.JSONDecodeError:
+                error_message = f"Failed to decode JSON from model response: {response_content}"
+                print(f"Error: {error_message}")
+                if generation:
+                    generation.update(level='ERROR', status_message=error_message)
+                return []
+            except Exception as e:
+                error_message = f"An unexpected error occurred: {e}"
+                print(f"Error: {error_message}")
+                if generation:
+                    generation.update(level='ERROR', status_message=error_message)
+                return []
+
+        print(f"Error: Request failed after {self.max_retries + 1} attempts.")
+        return []

@@ -69,7 +69,7 @@ def format_prompt(new_report_text: str, examples: list, entity_definitions: list
 
 def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     """
-    Executes the core prediction generation logic.
+    Executes the core prediction generation logic with incremental saving and resume capability.
     
     Args:
         config_path (str): Path to the RAG configuration file.
@@ -112,69 +112,81 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     llm_client = get_llm_client(config_path=config_path)
     logging.info("All components initialized successfully.")
 
-    # --- 3. Load Test Data ---
-    test_records = load_test_data(test_file_path)
-    logging.info(f"Loaded {len(test_records)} records for prediction from {test_file_path}.")
+    # --- 3. Load Test Data and Handle Resume Logic ---
+    all_test_records = load_test_data(test_file_path)
+    results_file = output_dir / "predictions.jsonl"
+    
+    completed_texts = set()
+    if results_file.exists():
+        logging.info(f"Found existing prediction file at: {results_file}. Attempting to resume.")
+        with open(results_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    completed_texts.add(json.loads(line)['source_text'])
+                except (json.JSONDecodeError, KeyError):
+                    continue # Ignore malformed lines
+    
+    records_to_process = [rec for rec in all_test_records if rec['text'] not in completed_texts]
+    
+    if completed_texts:
+        logging.info(f"Skipping {len(completed_texts)} already processed records.")
+    
+    logging.info(f"Total records to process in this run: {len(records_to_process)}.")
 
-    # --- 4. Process Each Test Record ---
-    results = []
+    # --- 4. Process Each Test Record and Save Incrementally ---
     n_examples_to_retrieve = rag_config.get('n_examples', 3)
     entity_definitions = rag_config.get('entity_labels', [])
-    # Extract the names of the valid entity labels for validation
     valid_entity_labels = {entity['name'] for entity in entity_definitions}
 
-    progress_bar = tqdm(test_records, desc="Generating RAG Predictions")
-    for record in progress_bar:
-        similar_examples = db_manager.search(
-            query_text=record['text'],
-            top_k=n_examples_to_retrieve
-        )
+    # Open the file in append mode to add new results
+    with open(results_file, 'a', encoding='utf-8') as f_out:
+        progress_bar = tqdm(records_to_process, desc="Generating RAG Predictions")
+        for record in progress_bar:
+            similar_examples = db_manager.search(
+                query_text=record['text'],
+                top_k=n_examples_to_retrieve
+            )
 
-        prompt = format_prompt(
-            new_report_text=record['text'],
-            examples=similar_examples,
-            entity_definitions=entity_definitions,
-            prompt_template=prompt_template
-        )
-        
-        predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace)
+            prompt = format_prompt(
+                new_report_text=record['text'],
+                examples=similar_examples,
+                entity_definitions=entity_definitions,
+                prompt_template=prompt_template
+            )
+            
+            predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace)
 
-        # --- Validate and Clean LLM Output ---
-        validated_entities = []
-        for entity in predicted_entities:
-            if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
-                validated_entities.append(entity)
-            else:
-                logging.warning(f"Discarding invalid entity from LLM output: {entity}")
+            # Validate and Clean LLM Output
+            validated_entities = []
+            for entity in predicted_entities:
+                if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
+                    validated_entities.append(entity)
+                else:
+                    logging.warning(f"Discarding invalid entity from LLM output: {entity}")
 
-        # Reconstruct true entities, filtering to include only those in the config
-        true_entities_decoded = []
-        for entity in record.get("entities", []):
-            # Only include the true entity if its label is valid
-            if entity.get("label") in valid_entity_labels:
-                true_entities_decoded.append({
-                    "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                    "label": entity["label"]
-                })
+            # Reconstruct true entities
+            true_entities_decoded = []
+            for entity in record.get("entities", []):
+                if entity.get("label") in valid_entity_labels:
+                    true_entities_decoded.append({
+                        "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                        "label": entity["label"]
+                    })
 
-        results.append({
-            "source_text": record['text'],
-            "true_entities": true_entities_decoded,
-            "predicted_entities": validated_entities,
-            "prompt_used": prompt
-        })
+            # Format and write the result immediately
+            result_line = {
+                "source_text": record['text'],
+                "true_entities": true_entities_decoded,
+                "predicted_entities": validated_entities,
+                "prompt_used": prompt
+            }
+            f_out.write(json.dumps(result_line, ensure_ascii=False) + '\n')
 
-    # --- 5. Save Results ---
-    results_file = output_dir / "predictions.jsonl"
-    logging.info(f"Saving {len(results)} results to {results_file}...")
-    with open(results_file, 'w', encoding='utf-8') as f:
-        for res in results:
-            f.write(json.dumps(res, ensure_ascii=False) + '\n')
-
-    logging.info(f"Prediction generation complete. Predictions saved to: {results_file}")
+    logging.info(f"Prediction generation complete. All results saved to: {results_file}")
     logging.info("--- RAG Prediction Pipeline Finished Successfully ---")
 
-def main(config_path: str):
+
+def main(config_path: str, resume_dir: Optional[str] = None):
     """
     Sets up tracing, logging, and output directories, then runs the main prediction pipeline.
     """
@@ -190,14 +202,21 @@ def main(config_path: str):
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
-    task = config.get("task", "ner")
-    base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_output_dir = base_output_dir / task / timestamp
-    run_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    print(f"All RAG prediction outputs for this run will be saved in: {run_output_dir}")
-    shutil.copy(config_path, run_output_dir / "rag_config.yaml")
+    if resume_dir:
+        run_output_dir = Path(resume_dir)
+        if not run_output_dir.exists():
+            raise FileNotFoundError(f"Resume directory not found: {resume_dir}")
+        print(f"Resuming RAG prediction run in existing directory: {run_output_dir}")
+    else:
+        task = config.get("task", "ner")
+        base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_output_dir = base_output_dir / task / timestamp
+        run_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Starting new RAG prediction run. Outputs will be saved in: {run_output_dir}")
+        # Copy the config only for new runs to avoid overwriting
+        shutil.copy(config_path, run_output_dir / "rag_config.yaml")
 
     # --- Langfuse Tracing (Optional) ---
     langfuse_client = None
@@ -229,5 +248,12 @@ if __name__ == '__main__':
         help='Path to the RAG configuration YAML file.'
     )
     
+    parser.add_argument(
+        '--resume-dir',
+        type=str,
+        default=None,
+        help='Path to an existing run directory to resume an interrupted prediction job.'
+    )
+    
     args = parser.parse_args()
-    main(args.config_path)
+    main(args.config_path, args.resume_dir)

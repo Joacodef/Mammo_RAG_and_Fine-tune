@@ -68,6 +68,7 @@ def setup_rag_test_environment(tmp_path, rag_integration_config):
         {"text": "This is a test report with a finding.", "entities": []}
     ]
     test_data_path = Path(config['test_file'])
+    test_data_path.parent.mkdir(parents=True, exist_ok=True)
     with open(test_data_path, 'w') as f:
         for record in test_data:
             f.write(json.dumps(record) + '\n')
@@ -135,3 +136,80 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag_te
     mock_langfuse_instance.flush.assert_called_once()
 
     print("--- RAG Pipeline Test Successful ---")
+
+
+@patch('scripts.evaluation.generate_rag_predictions.Langfuse')
+@patch('src.llm_services.OpenAIClient')
+def test_rag_prediction_resume_functionality(mock_openai_client, mock_langfuse, rag_integration_config, tmp_path, monkeypatch):
+    """
+    Tests that the RAG prediction script correctly resumes from a partially completed run.
+    """
+    # --- 1. Setup: Create a more extensive test environment ---
+    config_path = Path(rag_integration_config)
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Create a test file with multiple records
+    test_data = [
+        {"text": "First test report.", "entities": []},
+        {"text": "Second test report.", "entities": []},
+        {"text": "Third test report.", "entities": []}
+    ]
+    test_data_path = Path(config['test_file'])
+    test_data_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(test_data_path, 'w') as f:
+        for record in test_data:
+            f.write(json.dumps(record) + '\n')
+            
+    # Create the prompt template file that the config expects
+    prompt_template_path = Path(config['rag_prompt']['prompt_template_path'])
+    prompt_template_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(prompt_template_path, 'w') as f:
+        f.write("Test prompt: {new_report_text}")
+        
+    # --- 2. Simulate an Interrupted Run ---
+    # Create the output directory that would have been made by the first run
+    run_dir = Path(config['output_dir']) / "ner" / "20250829_120000_resume_test"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a partial predictions file, simulating that the first record was completed
+    partial_predictions_file = run_dir / "predictions.jsonl"
+    completed_record = {
+        "source_text": "First test report.",
+        "true_entities": [],
+        "predicted_entities": [{"text": "first finding", "label": "FIND"}],
+        "prompt_used": "..."
+    }
+    with open(partial_predictions_file, 'w') as f:
+        f.write(json.dumps(completed_record) + '\n')
+
+    # --- 3. Setup Mocks ---
+    mock_api_response = [{"text": "some finding", "label": "FIND"}]
+    mock_client_instance = MagicMock()
+    mock_client_instance.get_ner_prediction.return_value = mock_api_response
+    mock_openai_client.return_value = mock_client_instance
+    mock_langfuse.return_value = MagicMock() # Mock langfuse to prevent network calls
+
+    # --- 4. Execute the Resume Run ---
+    print("\n--- Running RAG Prediction Generation with --resume-dir ---")
+    generate_rag_predictions_main(config_path=str(config_path), resume_dir=str(run_dir))
+
+    # --- 5. Assert Correct Behavior ---
+    # Assert that the API was only called for the remaining, unprocessed records
+    assert mock_client_instance.get_ner_prediction.call_count == 2, \
+        "Expected the LLM client to be called only for the two remaining records."
+
+    # Assert that the final prediction file contains all results (the original + the new ones)
+    with open(partial_predictions_file, 'r') as f:
+        final_predictions = [json.loads(line) for line in f]
+    
+    assert len(final_predictions) == 3, "Expected the final predictions file to contain all three records."
+    
+    # Check that the first record is the one we manually created
+    assert final_predictions[0]["source_text"] == "First test report."
+    # Check that the other records were processed
+    processed_texts = {p["source_text"] for p in final_predictions}
+    assert "Second test report." in processed_texts
+    assert "Third test report." in processed_texts
+
+    print("--- RAG Resume Functionality Test Successful ---")
