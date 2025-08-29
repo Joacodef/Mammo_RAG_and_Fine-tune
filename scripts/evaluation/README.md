@@ -35,7 +35,7 @@ The script is driven by a YAML configuration file (`configs/evaluation_ner_confi
 ```bash
 python scripts/evaluation/generate_finetuned_predictions.py \
   --config-path configs/evaluation_ner_config.yaml
-````
+```
 
 -----
 
@@ -64,16 +64,15 @@ This script takes a raw prediction file (or a directory of prediction files) and
 
 ### Usage
 
-You must specify the type of task evaluation (`ner`, `rag`, or `re`) and provide either a path to a single prediction file or a directory.
+You must specify the type of task evaluation (`ner`, `rag`, or `re`) and provide either a path to a single prediction file or a directory. Note that the `--config-path` argument is only required for the `re` (Relation Extraction) task type.
 
   * **To calculate metrics for a single fine-tuned NER model's predictions:**
 
     ```bash
     python scripts/evaluation/calculate_final_metrics.py \
-      --prediction-path output/finetuned_results/ner/train-50/20240820_143000/predictions_sample-1.jsonl \
+      --prediction-path output/finetuned_results/ner/train-50/20240828_150000/predictions_sample-1.jsonl \
       --type ner \
-      --config-path configs/evaluation_ner_config.yaml \
-      --output-path output/finetuned_results/ner/train-50/20240820_143000/final_metrics_sample-1.json
+      --output-path output/finetuned_results/ner/train-50/20240828_150000/final_metrics_sample-1.json
     ```
 
   * **To calculate aggregate metrics for a batch of fine-tuned models:**
@@ -81,19 +80,16 @@ You must specify the type of task evaluation (`ner`, `rag`, or `re`) and provide
 
     ```bash
     python scripts/evaluation/calculate_final_metrics.py \
-      --prediction-dir output/finetuned_results/ner/train-50/20240820_143000/ \
+      --prediction-dir output/finetuned_results/ner/train-50/20240828_150000/ \
       --type ner \
-      --config-path configs/evaluation_ner_config.yaml \
-      --output-path output/finetuned_results/ner/train-50/20240820_143000/aggregate_metrics_report.json
+      --output-path output/finetuned_results/ner/train-50/20240828_150000/aggregate_metrics_report.json
     ```
 
   * **To calculate metrics for RAG predictions:**
 
     ```bash
     python scripts/evaluation/calculate_final_metrics.py \
-      --prediction-path output/rag_results/rag_predictions_20240820_150000.jsonl \
+      --prediction-path output/rag_results/ner/20240828_160000/predictions.jsonl \
       --type rag \
-      --output-path output/rag_results/final_metrics.json
+      --output-path output/rag_results/ner/20240828_160000/final_metrics.json
     ```
-
-<!-- end list -->

@@ -40,7 +40,7 @@ This script manages the training process for RE models. It is structurally simil
 
 1.  **Configure Training**: Ensure the `configs/training_re_config.yaml` file is configured for the RE task.
 
-2.  **Execute the Script**: Run the script from the **root directory**, pointing to the RE configuration and the desired data partition. I recommend renaming the script file from `run_re_trainig.py` to `run_re_training.py` to fix the typo.
+2.  **Execute the Script**: Run the script from the **root directory**, pointing to the RE configuration and the desired data partition.
 
     ```bash
     python scripts/training/run_re_training.py \
@@ -48,4 +48,4 @@ This script manages the training process for RE models. It is structurally simil
       --partition-dir data/processed/train-50
     ```
 
-3.  **Output**: The script creates a unique, timestamped directory for the entire run, inside which each trained model sample will be saved. This prevents accidental overwriting of previous results. For example: `output/models_re/re/train-50/20240828_120729/sample-1/`.
+3.  **Output**: The script creates a unique, timestamped directory for the entire run, inside which each trained model sample will be saved. This prevents accidental overwriting of previous results. For example: `output/models/re/train-50/20240828_120729/sample-1/`.
