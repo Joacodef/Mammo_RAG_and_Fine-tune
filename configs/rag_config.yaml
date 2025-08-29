@@ -54,11 +54,11 @@ llm:
 # --- Vector Database Configuration ---
 vector_db:
   # Path where the FAISS index file will be stored.
-  index_path: "output/vector_db/faiss_index_10_1.bin"
+  index_path: "output/vector_db/faiss_index_100_1.bin"
 
   # Path to the source data used to build the vector database.
   # This should be the global training set created by generate_partitions.py.
-  source_data_path: "data/processed/train-10/sample-1/train.jsonl"
+  source_data_path: "data/processed/train-100/sample-1/train.jsonl"
 
   # The name of the sentence-transformer model to use for generating embeddings.
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
