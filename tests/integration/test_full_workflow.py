@@ -212,6 +212,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     rag_metrics_path = rag_run_dirs[0] / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(rag_predictions_path),
+        prediction_dir=None,
         eval_type='rag',
         config_path=str(rag_config_path),
         output_path=str(rag_metrics_path)
@@ -223,6 +224,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     finetuned_metrics_path = finetuned_eval_output_dir / "final_metrics.json"
     calculate_metrics(
         prediction_path=str(finetuned_predictions_path),
+        prediction_dir=None,
         eval_type='ner',
         config_path=str(training_config_path),
         output_path=str(finetuned_metrics_path)

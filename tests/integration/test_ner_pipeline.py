@@ -160,8 +160,9 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     # Call the unified metrics calculation script, removing the obsolete 'test_file' arg.
     calculate_metrics(
         prediction_path=str(expected_prediction_file),
+        prediction_dir=None,
         eval_type='ner',
-        config_path=str(training_config_path), # The config contains the necessary label map
+        config_path=str(training_config_path),
         output_path=str(final_metrics_path)
     )
 

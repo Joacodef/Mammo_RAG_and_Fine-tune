@@ -105,10 +105,10 @@ def test_re_model_can_overfit_on_small_batch(tmp_path):
     
     # --- 5. Assert High Performance ---
     # The output from the predictor is already in the format needed for sklearn
-    prediction_records = [
-        {"true_labels": t, "predicted_labels": p}
-        for t, p in zip(true_labels, predictions)
-    ]
+    prediction_records = [{
+        "true_labels": true_labels,
+        "predicted_labels": predictions
+    }]
 
     report = calculate_finetuned_re_metrics(prediction_records, overfit_config)
     

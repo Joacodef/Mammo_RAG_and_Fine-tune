@@ -105,7 +105,7 @@ def test_ner_workflow(
 @patch('scripts.evaluation.generate_finetuned_predictions.REModel')
 @patch('scripts.evaluation.generate_finetuned_predictions.BertNerModel')
 @patch('scripts.evaluation.generate_finetuned_predictions.Predictor')
-@patch('builtins.open', new_callable=mock_open, read_data='{"text": "Sample RE text."}')
+@patch('builtins.open', new_callable=mock_open, read_data='{"text": "Sample RE text.", "entities": [{"id": 1, "start_offset": 0, "end_offset": 6}, {"id": 2, "start_offset": 7, "end_offset": 12}]}')
 @patch('pathlib.Path.mkdir')
 def test_re_workflow(mock_mkdir, mock_file_open, mock_predictor, mock_bert_ner_model, mock_re_model, mock_ner_datamodule, mock_re_datamodule, re_config):
     """
@@ -114,7 +114,13 @@ def test_re_workflow(mock_mkdir, mock_file_open, mock_predictor, mock_bert_ner_m
     # --- Setup Mocks ---
     mock_predictor_instance = mock_predictor.return_value
     # For RE, predict returns a flat list of labels, one for each instance.
-    mock_predictor_instance.predict.return_value = ([0], [1], np.array([]))
+    mock_predictor_instance.predict.return_value = ([0, 1], [1, 2], np.array([]))
+
+    # Configure the mock REDataModule to have the necessary 'relation_map' attribute
+    mock_datamodule_instance = mock_re_datamodule.return_value
+    mock_datamodule_instance.relation_map = {label: i for i, label in enumerate(re_config['model']['relation_labels'])}
+    # Add "No_Relation" to the map as the script expects it for permutations
+    mock_datamodule_instance.relation_map['No_Relation'] = len(mock_datamodule_instance.relation_map)
 
     # --- Act ---
     run_prediction_and_save(re_config)
@@ -130,8 +136,8 @@ def test_re_workflow(mock_mkdir, mock_file_open, mock_predictor, mock_bert_ner_m
     written_data = handle.write.call_args[0][0]
     expected_output = {
         "source_text": "Sample RE text.",
-        "true_labels": 1,
-        "predicted_labels": 0
+        "true_labels": [1, 2],
+        "predicted_labels": [0, 1]
     }
     assert json.loads(written_data) == expected_output
 
