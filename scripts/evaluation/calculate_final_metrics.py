@@ -1,16 +1,9 @@
 import argparse
 import json
 from pathlib import Path
-import yaml
 from collections import defaultdict
 from sklearn.metrics import classification_report as sklearn_classification_report
 import numpy as np
-
-# Add the project root to the Python path
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from src.data_loader.re_datamodule import REDataModule
 
 def convert_numpy_types(obj):
     """
@@ -237,7 +230,7 @@ def aggregate_metrics(reports: list) -> dict:
 
     return summary
 
-def main(prediction_path: str, prediction_dir: str, eval_type: str, config_path: str, output_path: str):
+def main(prediction_path: str, prediction_dir: str, eval_type: str, output_path: str):
     """
     Main function to calculate and save metrics from a prediction file or directory.
     """
@@ -251,7 +244,7 @@ def main(prediction_path: str, prediction_dir: str, eval_type: str, config_path:
 
         individual_reports = []
         for file_path in prediction_files:
-            report = process_single_file(str(file_path), eval_type, config_path)
+            report = process_single_file(str(file_path), eval_type)
             individual_reports.append({
                 "source_file": file_path.name,
                 "report": report
@@ -266,7 +259,7 @@ def main(prediction_path: str, prediction_dir: str, eval_type: str, config_path:
 
     else:
         print(f"--- Calculating Metrics for File: {prediction_path} ---")
-        final_report = process_single_file(prediction_path, eval_type, config_path)
+        final_report = process_single_file(prediction_path, eval_type)
 
     # Save the final report
     output_path = Path(output_path)
@@ -280,7 +273,7 @@ def main(prediction_path: str, prediction_dir: str, eval_type: str, config_path:
     print(f"\nReport saved successfully to: {output_path}")
 
 
-def process_single_file(prediction_path: str, eval_type: str, config_path: str) -> dict:
+def process_single_file(prediction_path: str, eval_type: str) -> dict:
     """Processes a single prediction file and returns its metrics report."""
     predictions = load_predictions(prediction_path)
 
@@ -319,11 +312,6 @@ if __name__ == '__main__':
         help="The type of task evaluation."
     )
     parser.add_argument(
-        '--config-path',
-        type=str,
-        help="Path to the model config file (required for 're' type)."
-    )
-    parser.add_argument(
         '--output-path',
         type=str,
         required=True,
@@ -332,7 +320,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.type == 're' and not args.config_path:
-        parser.error("--config-path is required when --type is 're'")
-
-    main(args.prediction_path, args.prediction_dir, args.type, args.config_path, args.output_path)
+    main(args.prediction_path, args.prediction_dir, args.type, args.output_path)
