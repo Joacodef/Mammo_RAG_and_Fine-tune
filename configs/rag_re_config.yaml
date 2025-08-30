@@ -41,16 +41,6 @@ llm:
       # e.g., 1.5 means the next timeout will be 1.5x the previous one.
       backoff_factor: 1.5
 
-  # Settings for a future AWS SageMaker client.
-  # These are used only when provider is set to "aws_sagemaker".
-  aws_sagemaker:
-    # The name of the deployed SageMaker endpoint that hosts the model.
-    endpoint_name: "llama-3-70b-instruct-placeholder"
-
-    # The AWS region where the SageMaker endpoint is deployed.
-    region: "us-east-1"
-
-
 # --- Vector Database Configuration ---
 vector_db:
   # Path where the FAISS index file will be stored.
