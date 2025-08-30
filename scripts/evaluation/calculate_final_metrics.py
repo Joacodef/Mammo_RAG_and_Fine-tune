@@ -308,7 +308,7 @@ if __name__ == '__main__':
         '--type',
         type=str,
         required=True,
-        choices=['ner', 'rag'],
+        choices=['ner', 're'],
         help="The type of task evaluation."
     )
     parser.add_argument(
