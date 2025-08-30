@@ -117,6 +117,59 @@ def decode_entities_from_tokens(
         
     return reconstructed_entities
 
+
+def decode_relations_from_ids(
+    record: dict,
+    predictions: list,
+    inv_relation_map: dict,
+    datamodule_relation_map: dict
+) -> list:
+    """
+    Decodes a flat list of integer relation predictions back into a structured
+    list of relation dictionaries.
+
+    Args:
+        record (dict): The original source data record, containing the 'entities'.
+        predictions (list): The flat list of predicted integer labels for this record.
+        inv_relation_map (dict): Maps relation IDs back to their string names.
+        datamodule_relation_map (dict): The original relation map from the datamodule,
+                                        used to filter for valid relation types.
+
+    Returns:
+        list: A list of decoded relation dictionaries.
+    """
+    reconstructed_relations = []
+    
+    # Re-generate the entity pairs in the same order as the REDataModule to
+    # correctly map the flat prediction list back to its corresponding pair.
+    entities = record.get("entities", [])
+    relations = record.get("relations", [])
+    relation_lookup = {(rel["from_id"], rel["to_id"]): rel["type"] for rel in relations}
+    
+    prediction_idx = 0
+    for head, tail in itertools.permutations(entities, 2):
+        # We only consider pairs that were valid during training
+        relation_type = relation_lookup.get((head["id"], tail["id"]), "No_Relation")
+        if relation_type not in datamodule_relation_map:
+            continue
+
+        # Check if we have a prediction for this valid pair
+        if prediction_idx < len(predictions):
+            predicted_label_id = predictions[prediction_idx]
+            predicted_label_str = inv_relation_map.get(predicted_label_id, "No_Relation")
+
+            # We only save the relation if the model predicted something other than "No_Relation"
+            if predicted_label_str != "No_Relation":
+                reconstructed_relations.append({
+                    "from_id": head["id"],
+                    "to_id": tail["id"],
+                    "type": predicted_label_str
+                })
+            
+            prediction_idx += 1
+            
+    return reconstructed_relations
+
 def run_prediction_and_save(config):
     """
     Main function to run predictions on a test set and save the decoded outputs.
@@ -188,6 +241,7 @@ def run_prediction_and_save(config):
             }))
     else: # RE task now correctly groups instances by source text
         instance_idx = 0
+        inv_relation_map = {v: k for k, v in datamodule.relation_map.items()}
         for record in source_records:
             # To correctly map the flat list of predictions back to the source record,
             # we must recalculate how many valid instances this record generates.
@@ -205,17 +259,31 @@ def run_prediction_and_save(config):
             record_predictions = predictions[instance_idx : instance_idx + num_instances_for_record]
             record_true_labels = true_labels[instance_idx : instance_idx + num_instances_for_record]
 
-            # For RE, we now save a list of predictions for each source text
+            # Decode both the true and predicted labels into the dictionary format
+            predicted_relations_decoded = decode_relations_from_ids(
+                record=record,
+                predictions=record_predictions,
+                inv_relation_map=inv_relation_map,
+                datamodule_relation_map=datamodule.relation_map
+            )
+            
+            true_relations_decoded = decode_relations_from_ids(
+                record=record,
+                predictions=record_true_labels,
+                inv_relation_map=inv_relation_map,
+                datamodule_relation_map=datamodule.relation_map
+            )
+
             output_data.append(convert_numpy_types({
                 "source_text": record.get("text", ""),
-                "true_labels": record_true_labels,
-                "predicted_labels": record_predictions
+                "true_relations": true_relations_decoded,
+                "predicted_relations": predicted_relations_decoded
             }))
             instance_idx += num_instances_for_record
 
 
     # --- Save Decoded Outputs ---
-    filename_prefix = "predictions" if task == 'ner' else "raw_predictions"
+    filename_prefix = "predictions" # Unified for both tasks
     output_filename = output_dir / f"{filename_prefix}_{Path(model_path).name}.jsonl"
 
     with open(output_filename, 'w', encoding='utf-8') as f:

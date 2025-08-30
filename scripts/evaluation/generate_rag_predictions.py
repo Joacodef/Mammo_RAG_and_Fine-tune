@@ -24,9 +24,9 @@ def load_test_data(file_path: str) -> list:
     with open(file_path, 'r', encoding='utf-8') as f:
         return [json.loads(line) for line in f]
 
-def format_prompt(new_report_text: str, examples: list, entity_definitions: list, prompt_template: str) -> str:
+def format_ner_prompt(new_report_text: str, examples: list, entity_definitions: list, prompt_template: str) -> str:
     """
-    Constructs the final few-shot prompt for the LLM using a template file.
+    Constructs the final few-shot prompt for the NER task.
 
     Args:
         new_report_text (str): The text of the new mammogram report to analyze.
@@ -67,6 +67,201 @@ def format_prompt(new_report_text: str, examples: list, entity_definitions: list
     )
     return prompt
 
+
+def format_re_prompt(
+    new_report_text: str, 
+    entities: list, 
+    examples: list, 
+    relation_definitions: list, 
+    prompt_template: str
+) -> str:
+    """
+    Constructs the final few-shot prompt for the RE task.
+    """
+    # Format the relation definitions into a string
+    relation_definitions_str = ""
+    for rel in relation_definitions:
+        relation_definitions_str += f"- nombre: \"{rel['name']}\"\n  descripcion: \"{rel['description']}\"\n"
+
+    # Format the few-shot examples into a string for RE
+    examples_str = ""
+    for ex in examples:
+        # For RE, examples must show the text, the entities, and the resulting relations
+        entities_list = ex.get("entities", [])
+        relations_list = ex.get("relations", [])
+        
+        # We need to add the 'text' of the span to the entity object for the prompt
+        formatted_entities = []
+        for e in entities_list:
+            entity_text = ex['text'][e['start_offset']:e['end_offset']]
+            formatted_entities.append({
+                "id": e["id"],
+                "label": e["label"],
+                "text": entity_text
+            })
+
+        entities_json_str = json.dumps(formatted_entities, ensure_ascii=False, indent=4)
+        relations_json_str = json.dumps(relations_list, ensure_ascii=False, indent=4)
+        
+        examples_str += (
+            f"Texto: {ex['text']}\n"
+            f"Entidades:\n{entities_json_str}\n"
+            f"Respuesta:\n{relations_json_str}\n---\n"
+        )
+    
+    # Format the entities for the new report into a JSON string
+    new_entities_formatted = []
+    for e in entities:
+        entity_text = new_report_text[e['start_offset']:e['end_offset']]
+        new_entities_formatted.append({
+            "id": e["id"],
+            "label": e["label"],
+            "text": entity_text
+        })
+    entities_json_str_new = json.dumps(new_entities_formatted, ensure_ascii=False, indent=4)
+
+    # Inject the dynamic content into the template's placeholders
+    prompt = prompt_template.format(
+        relation_definitions=relation_definitions_str.strip(),
+        examples=examples_str.strip(),
+        new_report_text=new_report_text,
+        entities_json=entities_json_str_new
+    )
+    return prompt
+
+def _run_ner_prediction_loop(records_to_process, all_test_texts, results_file, rag_config, db_manager, llm_client, trace):
+    """Handles the prediction loop specifically for the NER task."""
+    n_examples_to_retrieve = rag_config.get('n_examples', 3)
+    entity_definitions = rag_config.get('entity_labels', [])
+    valid_entity_labels = {entity['name'] for entity in entity_definitions}
+    prompt_template_path = rag_config.get('prompt_template_path')
+
+    if not prompt_template_path:
+        raise ValueError("'prompt_template_path' not found in rag_config.yaml")
+
+    with open(prompt_template_path, 'r', encoding='utf-8') as f:
+        prompt_template = f.read()
+
+    # Open the file in append mode to add new results
+    with open(results_file, 'a', encoding='utf-8') as f_out:
+        progress_bar = tqdm(records_to_process, desc="Generating RAG NER Predictions")
+        for record in progress_bar:
+            try:
+                report_index = all_test_texts.index(record['text'])
+            except ValueError:
+                report_index = -1 # Fallback in case the record text isn't found
+            if n_examples_to_retrieve > 0:
+                similar_examples = db_manager.search(
+                    query_text=record['text'],
+                    top_k=n_examples_to_retrieve
+                )
+            else:
+                similar_examples = []
+
+            prompt = format_ner_prompt(
+                new_report_text=record['text'],
+                examples=similar_examples,
+                entity_definitions=entity_definitions,
+                prompt_template=prompt_template
+            )
+            
+            predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace, report_index=report_index)
+
+            # Validate and Clean LLM Output
+            validated_entities = []
+            for entity in predicted_entities:
+                if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
+                    validated_entities.append(entity)
+                else:
+                    logging.warning(f"Discarding invalid entity from LLM output: {entity}")
+
+            # Reconstruct true entities
+            true_entities_decoded = []
+            for entity in record.get("entities", []):
+                if entity.get("label") in valid_entity_labels:
+                    true_entities_decoded.append({
+                        "text": record["text"][entity["start_offset"]:entity["end_offset"]],
+                        "label": entity["label"]
+                    })
+
+            # Format and write the result immediately
+            result_line = {
+                "source_text": record['text'],
+                "true_entities": true_entities_decoded,
+                "predicted_entities": validated_entities,
+                "prompt_used": prompt
+            }
+            f_out.write(json.dumps(result_line, ensure_ascii=False) + '\n')
+
+# scripts/evaluation/generate_rag_predictions.py
+
+def _run_re_prediction_loop(records_to_process, all_test_texts, results_file, rag_config, db_manager, llm_client, trace):
+    """Handles the prediction loop specifically for the RE task."""
+    n_examples_to_retrieve = rag_config.get('n_examples', 3)
+    relation_definitions = rag_config.get('relation_labels', [])
+    valid_relation_types = {rel['name'] for rel in relation_definitions}
+    prompt_template_path = rag_config.get('prompt_template_path')
+
+    if not prompt_template_path:
+        raise ValueError("'prompt_template_path' not found in re_prompt config.")
+
+    with open(prompt_template_path, 'r', encoding='utf-8') as f:
+        prompt_template = f.read()
+
+    # Open the file in append mode to add new results
+    with open(results_file, 'a', encoding='utf-8') as f_out:
+        progress_bar = tqdm(records_to_process, desc="Generating RAG RE Predictions")
+        for record in progress_bar:
+            # For RE, we use the ground-truth entities from the test set as input
+            entities = record.get("entities", [])
+            if not entities:
+                logging.warning(f"Skipping record with no entities: {record.get('text', 'N/A')}")
+                continue
+
+            try:
+                report_index = all_test_texts.index(record['text'])
+            except ValueError:
+                report_index = -1
+
+            if n_examples_to_retrieve > 0:
+                similar_examples = db_manager.search(
+                    query_text=record['text'],
+                    top_k=n_examples_to_retrieve
+                )
+            else:
+                similar_examples = []
+
+            prompt = format_re_prompt(
+                new_report_text=record['text'],
+                entities=entities,
+                examples=similar_examples,
+                relation_definitions=relation_definitions,
+                prompt_template=prompt_template
+            )
+            
+            predicted_relations = llm_client.get_re_prediction(prompt, trace=trace, report_index=report_index)
+
+            # Validate the structure of the LLM output
+            validated_relations = []
+            for rel in predicted_relations:
+                if (isinstance(rel, dict) and 
+                    "from_id" in rel and 
+                    "to_id" in rel and 
+                    rel.get("type") in valid_relation_types):
+                    validated_relations.append(rel)
+                else:
+                    logging.warning(f"Discarding invalid relation from LLM output: {rel}")
+
+            # Format and write the result immediately
+            result_line = {
+                "source_text": record['text'],
+                "true_relations": record.get("relations", []),
+                "predicted_relations": validated_relations,
+                "prompt_used": prompt
+            }
+            f_out.write(json.dumps(result_line, ensure_ascii=False) + '\n')
+
+
 def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     """
     Executes the core prediction generation logic with incremental saving and resume capability.
@@ -82,6 +277,10 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     logging.info(f"Loaded configuration from: {config_path}")
+
+    task = config.get("task")
+    if not task or task not in ['ner', 're']:
+        raise ValueError("Configuration file must specify a 'task': 'ner' or 're'.")
 
     rag_config = config.get('rag_prompt', {})
     db_config = config.get('vector_db', {})
@@ -134,61 +333,27 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     logging.info(f"Total records to process in this run: {len(records_to_process)}.")
     all_test_texts = [rec['text'] for rec in all_test_records]
 
-    # --- 4. Process Each Test Record and Save Incrementally ---
-    n_examples_to_retrieve = rag_config.get('n_examples', 3)
-    entity_definitions = rag_config.get('entity_labels', [])
-    valid_entity_labels = {entity['name'] for entity in entity_definitions}
-
-    # Open the file in append mode to add new results
-    with open(results_file, 'a', encoding='utf-8') as f_out:
-        progress_bar = tqdm(records_to_process, desc="Generating RAG Predictions")
-        for record in progress_bar:
-            try:
-                report_index = all_test_texts.index(record['text'])
-            except ValueError:
-                report_index = -1 # Fallback in case the record text isn't found
-            if n_examples_to_retrieve > 0:
-                similar_examples = db_manager.search(
-                    query_text=record['text'],
-                    top_k=n_examples_to_retrieve
-                )
-            else:
-                similar_examples = []
-
-            prompt = format_prompt(
-                new_report_text=record['text'],
-                examples=similar_examples,
-                entity_definitions=entity_definitions,
-                prompt_template=prompt_template
-            )
-            
-            predicted_entities = llm_client.get_ner_prediction(prompt, trace=trace, report_index=report_index)
-
-            # Validate and Clean LLM Output
-            validated_entities = []
-            for entity in predicted_entities:
-                if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
-                    validated_entities.append(entity)
-                else:
-                    logging.warning(f"Discarding invalid entity from LLM output: {entity}")
-
-            # Reconstruct true entities
-            true_entities_decoded = []
-            for entity in record.get("entities", []):
-                if entity.get("label") in valid_entity_labels:
-                    true_entities_decoded.append({
-                        "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                        "label": entity["label"]
-                    })
-
-            # Format and write the result immediately
-            result_line = {
-                "source_text": record['text'],
-                "true_entities": true_entities_decoded,
-                "predicted_entities": validated_entities,
-                "prompt_used": prompt
-            }
-            f_out.write(json.dumps(result_line, ensure_ascii=False) + '\n')
+    # --- 4. Process Each Test Record ---
+    if task == 'ner':
+        _run_ner_prediction_loop(
+            records_to_process=records_to_process,
+            all_test_texts=all_test_texts,
+            results_file=results_file,
+            rag_config=rag_config,
+            db_manager=db_manager,
+            llm_client=llm_client,
+            trace=trace
+        )
+    elif task == 're':
+        _run_re_prediction_loop(
+            records_to_process=records_to_process,
+            all_test_texts=all_test_texts,
+            results_file=results_file,
+            rag_config=rag_config,
+            db_manager=db_manager,
+            llm_client=llm_client,
+            trace=trace
+        )
 
     logging.info(f"Prediction generation complete. All results saved to: {results_file}")
     logging.info("--- RAG Prediction Pipeline Finished Successfully ---")

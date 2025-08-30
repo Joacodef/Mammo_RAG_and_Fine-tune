@@ -17,6 +17,7 @@ from scripts.evaluation.generate_rag_predictions import main as generate_rag_pre
 def rag_integration_config(tmp_path):
     """Provides a minimal configuration for the RAG integration test."""
     config = {
+        'task': 'ner',
         'llm': {
             'provider': 'openai',
             'openai': {

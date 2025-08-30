@@ -100,6 +100,7 @@ def test_ner_workflow(
     }
     assert json.loads(written_data) == expected_output
 
+@patch('scripts.evaluation.generate_finetuned_predictions.decode_relations_from_ids')
 @patch('scripts.evaluation.generate_finetuned_predictions.REDataModule')
 @patch('scripts.evaluation.generate_finetuned_predictions.NERDataModule')
 @patch('scripts.evaluation.generate_finetuned_predictions.REModel')
@@ -107,20 +108,27 @@ def test_ner_workflow(
 @patch('scripts.evaluation.generate_finetuned_predictions.Predictor')
 @patch('builtins.open', new_callable=mock_open, read_data='{"text": "Sample RE text.", "entities": [{"id": 1, "start_offset": 0, "end_offset": 6}, {"id": 2, "start_offset": 7, "end_offset": 12}]}')
 @patch('pathlib.Path.mkdir')
-def test_re_workflow(mock_mkdir, mock_file_open, mock_predictor, mock_bert_ner_model, mock_re_model, mock_ner_datamodule, mock_re_datamodule, re_config):
+def test_re_workflow(
+    mock_mkdir,
+    mock_file_open,
+    mock_predictor,
+    mock_bert_ner_model,
+    mock_re_model,
+    mock_ner_datamodule,
+    mock_re_datamodule,
+    mock_decode_relations, # Renamed for clarity
+    re_config
+):
     """
     Tests the end-to-end prediction generation workflow for a RE task.
     """
     # --- Setup Mocks ---
     mock_predictor_instance = mock_predictor.return_value
-    # For RE, predict returns a flat list of labels, one for each instance.
     mock_predictor_instance.predict.return_value = ([0, 1], [1, 2], np.array([]))
 
-    # Configure the mock REDataModule to have the necessary 'relation_map' attribute
-    mock_datamodule_instance = mock_re_datamodule.return_value
-    mock_datamodule_instance.relation_map = {label: i for i, label in enumerate(re_config['model']['relation_labels'])}
-    # Add "No_Relation" to the map as the script expects it for permutations
-    mock_datamodule_instance.relation_map['No_Relation'] = len(mock_datamodule_instance.relation_map)
+    # Mock the new decoder to return a predictable relation list
+    mock_decoded_relations = [{"from_id": 1, "to_id": 2, "type": "ubicar"}]
+    mock_decode_relations.return_value = mock_decoded_relations
 
     # --- Act ---
     run_prediction_and_save(re_config)
@@ -129,15 +137,18 @@ def test_re_workflow(mock_mkdir, mock_file_open, mock_predictor, mock_bert_ner_m
     # 1. Verify correct modules were initialized for RE
     mock_re_datamodule.assert_called_once_with(config=re_config, test_file=re_config['test_file'])
     mock_re_model.assert_called_once()
-    assert not mock_ner_datamodule.called
-    
-    # 2. Verify output content (should still be raw labels for RE)
+
+    # 2. Verify Predictor was used and the new decoder was called
+    mock_predictor_instance.predict.assert_called_once()
+    assert mock_decode_relations.call_count == 2 # Called for true and predicted labels
+
+    # 3. Verify output content matches the new unified format
     handle = mock_file_open()
     written_data = handle.write.call_args[0][0]
     expected_output = {
         "source_text": "Sample RE text.",
-        "true_labels": [1, 2],
-        "predicted_labels": [0, 1]
+        "true_relations": mock_decoded_relations,
+        "predicted_relations": mock_decoded_relations
     }
     assert json.loads(written_data) == expected_output
 

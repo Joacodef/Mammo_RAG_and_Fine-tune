@@ -19,8 +19,8 @@ def sample_record_needs_correction():
         "source_text": "Ambas mamas son densas. Se observa un nódulo en la mama derecha.",
         "predicted_entities": [{
             "label": "FIND",
-            "start_offset": 30, # Incorrect, points into "observa un"
-            "end_offset": 38,
+            "start_offset": 27, # Incorrect, points into "observa un"
+            "end_offset": 37,
             "text": "nódulo"
         }]
     }
@@ -32,8 +32,8 @@ def sample_record_perfect_match():
         "source_text": "Ambas mamas son densas. Se observa un nódulo en la mama derecha.",
         "predicted_entities": [{
             "label": "FIND",
-            "start_offset": 39, # Correct
-            "end_offset": 45,
+            "start_offset": 38, # Correct
+            "end_offset": 44,
             "text": "nódulo"
         }]
     }
@@ -117,44 +117,57 @@ def test_find_nearest_match_selects_closest_occurrence():
 
 # --- Tests for postprocess_predictions main function ---
 
-@patch("builtins.open", new_callable=mock_open)
-def test_postprocess_predictions_corrects_offsets(mock_file, sample_record_needs_correction):
+@patch("builtins.open")
+def test_postprocess_predictions_corrects_offsets(mock_open_func, sample_record_needs_correction):
     """
     Tests that the main function reads a file, corrects the offsets, and writes the result.
     """
-    # Simulate reading the input file
-    mock_file.return_value.__iter__.return_value = [json.dumps(sample_record_needs_correction)]
+    # Create a mock file handle for reading, pre-filled with the test data.
+    read_data = json.dumps(sample_record_needs_correction)
+    mock_read_handle = mock_open(read_data=read_data).return_value
+
+    # Create a separate, empty mock file handle for writing.
+    mock_write_handle = mock_open().return_value
+
+    # Configure the main 'open' mock to return the read handle on the first call,
+    # and the write handle on the second call.
+    mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
     postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
 
-    # Verify the content written to the output file
-    handle = mock_file()
-    written_data = handle.write.call_args[0][0]
+    # Verify the content written to the dedicated write handle
+    written_data = mock_write_handle.write.call_args[0][0]
     corrected_record = json.loads(written_data)
 
     corrected_entity = corrected_record["predicted_entities"][0]
-    assert corrected_entity["start_offset"] == 39
-    assert corrected_entity["end_offset"] == 45
+    assert corrected_entity["start_offset"] == 38
+    assert corrected_entity["end_offset"] == 44
     assert corrected_entity["text"] == "nódulo"
 
-@patch("builtins.open", new_callable=mock_open)
-def test_postprocess_predictions_drops_unmatched_entities(mock_file, sample_record_no_match):
+@patch("builtins.open")
+def test_postprocess_predictions_drops_unmatched_entities(mock_open_func, sample_record_no_match):
     """
     Tests that entities with no match in the source text are dropped from the output.
     """
-    mock_file.return_value.__iter__.return_value = [json.dumps(sample_record_no_match)]
+    # Create mock handles for reading and writing
+    read_data = json.dumps(sample_record_no_match)
+    mock_read_handle = mock_open(read_data=read_data).return_value
+    mock_write_handle = mock_open().return_value
+
+    # Configure the 'open' mock to return the correct handle for each call
+    mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
     postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
 
-    handle = mock_file()
-    written_data = handle.write.call_args[0][0]
+    # Verify the content written to the dedicated write handle
+    written_data = mock_write_handle.write.call_args[0][0]
     corrected_record = json.loads(written_data)
     
     # The list of predicted entities should now be empty
     assert len(corrected_record["predicted_entities"]) == 0
 
-@patch("builtins.open", new_callable=mock_open)
-def test_postprocess_predictions_handles_malformed_entity(mock_file):
+@patch("builtins.open")
+def test_postprocess_predictions_handles_malformed_entity(mock_open_func):
     """
     Tests that the function gracefully skips entities with missing or invalid keys.
     """
@@ -165,13 +178,20 @@ def test_postprocess_predictions_handles_malformed_entity(mock_file):
             {"text": "Some text", "start_offset": "invalid"} # Invalid offset type
         ]
     }
-    mock_file.return_value.__iter__.return_value = [json.dumps(malformed_record)]
+    
+    # Create mock handles for reading and writing
+    read_data = json.dumps(malformed_record)
+    mock_read_handle = mock_open(read_data=read_data).return_value
+    mock_write_handle = mock_open().return_value
+
+    # Configure the 'open' mock to return the correct handle for each call
+    mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
     # The function should run without raising an error
     postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
     
-    handle = mock_file()
-    written_data = handle.write.call_args[0][0]
+    # Verify the content written to the dedicated write handle
+    written_data = mock_write_handle.write.call_args[0][0]
     corrected_record = json.loads(written_data)
     
     # Both malformed entities should have been dropped

@@ -31,3 +31,23 @@ class BaseLLMClient(ABC):
                                   or in case of an error.
         """
         pass
+
+    # src/llm_services/base_client.py
+
+    @abstractmethod
+    def get_re_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
+        """
+        Sends a prompt to the LLM and returns the extracted relations for an RE task.
+
+        Args:
+            prompt (str): The fully constructed prompt for the RE task.
+            trace (Optional[Any]): The Langfuse trace object.
+            report_index (int, optional): The index of the report in the test set for tracing.
+
+        Returns:
+            List[Dict[str, Any]]: A list of extracted relation dictionaries.
+                                  Each dictionary is expected to have keys like
+                                  'from_id', 'to_id', and 'type'.
+                                  Returns an empty list in case of an error.
+        """
+        pass

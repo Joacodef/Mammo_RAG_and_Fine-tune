@@ -1,4 +1,3 @@
-# tests/model_behavior/test_re_learning.py
 import pytest
 import yaml
 import json
@@ -13,7 +12,9 @@ from src.data_loader.re_datamodule import REDataModule
 from src.models.re_model import REModel
 from src.training.trainer import Trainer
 from src.evaluation.predictor import Predictor
-from scripts.evaluation.calculate_final_metrics import calculate_finetuned_re_metrics
+from scripts.evaluation.generate_finetuned_predictions import decode_relations_from_ids
+from scripts.evaluation.calculate_final_metrics import calculate_re_metrics
+import itertools
 
 def test_re_model_can_overfit_on_small_batch(tmp_path):
     """
@@ -104,16 +105,56 @@ def test_re_model_can_overfit_on_small_batch(tmp_path):
     predictions, true_labels, _ = predictor.predict(test_loader, task_type='re')
     
     # --- 5. Assert High Performance ---
-    # The output from the predictor is already in the format needed for sklearn
+    # The raw predictions must be decoded back into the unified dictionary format.
+    instance_idx = 0
+    all_true_relations = []
+    all_predicted_relations = []
+
+    inv_relation_map = {v: k for k, v in datamodule.relation_map.items()}
+
+    for record in toy_dataset:
+        # Calculate how many valid instances this record generated
+        num_instances_for_record = 0
+        relations = record.get("relations", [])
+        relation_lookup = {(rel["from_id"], rel["to_id"]): rel["type"] for rel in relations}
+        for head, tail in itertools.permutations(record.get("entities", []), 2):
+            relation_type = relation_lookup.get((head["id"], tail["id"]), "No_Relation")
+            if relation_type in datamodule.relation_map:
+                num_instances_for_record += 1
+
+        # Slice the flat prediction lists for the current record
+        record_predictions = predictions[instance_idx : instance_idx + num_instances_for_record]
+        record_true_labels = true_labels[instance_idx : instance_idx + num_instances_for_record]
+
+        # Decode both true and predicted relations
+        predicted_relations_decoded = decode_relations_from_ids(
+            record=record,
+            predictions=record_predictions,
+            inv_relation_map=inv_relation_map,
+            datamodule_relation_map=datamodule.relation_map
+        )
+        true_relations_decoded = decode_relations_from_ids(
+            record=record,
+            predictions=record_true_labels,
+            inv_relation_map=inv_relation_map,
+            datamodule_relation_map=datamodule.relation_map
+        )
+
+        all_predicted_relations.extend(predicted_relations_decoded)
+        all_true_relations.extend(true_relations_decoded)
+
+        instance_idx += num_instances_for_record
+
+    # Now, calculate metrics on the decoded, unified lists
     prediction_records = [{
-        "true_labels": true_labels,
-        "predicted_labels": predictions
+        "true_relations": all_true_relations,
+        "predicted_relations": all_predicted_relations
     }]
 
-    report = calculate_finetuned_re_metrics(prediction_records, overfit_config)
-    
+    report = calculate_re_metrics(prediction_records)
+
     print("\n--- Overfitting Sanity Check Metrics (RE) ---")
     print(json.dumps(report, indent=2))
-    
+
     assert report['weighted avg']['f1-score'] >= 0.95, \
         "Model did not achieve a very high F1-score on the training data, indicating a potential learning issue for RE."

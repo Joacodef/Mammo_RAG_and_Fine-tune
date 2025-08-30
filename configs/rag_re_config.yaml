@@ -1,8 +1,8 @@
 # Configuration for the Retrieval-Augmented Generation (RAG) pipeline.
 # This file centralizes settings for the LLM provider, vector database,
-# and prompting strategies for the NER task.
+# and prompting strategies for the RE task.
 
-"task": "ner"
+"task": "re"
 
 # Test file
 test_file: "data/processed/test.jsonl"
@@ -54,11 +54,11 @@ llm:
 # --- Vector Database Configuration ---
 vector_db:
   # Path where the FAISS index file will be stored.
-  index_path: "output/vector_db/faiss_index_100_1.bin"
+  index_path: "output/vector_db/faiss_index_all_1.bin"
 
   # Path to the source data used to build the vector database.
   # This should be the global training set created by generate_partitions.py.
-  source_data_path: "data/processed/train-100/sample-1/train.jsonl"
+  source_data_path: "data/processed/train-all/sample-1/train.jsonl"
 
   # The name of the sentence-transformer model to use for generating embeddings.
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
@@ -67,27 +67,17 @@ vector_db:
 # --- RAG Prompting Configuration ---
 rag_prompt:
   # Path to the text file containing the prompt template.
-  prompt_template_path: "prompts/ner_rag_prompt_spanish.txt"
+  prompt_template_path: "prompts/rag_re_prompt_spanish.txt"
   
   # The number of similar examples to retrieve from the vector database
   # to include in the few-shot prompt.
-  n_examples: 1
+  n_examples: 3
 
   # The list of entity labels to be extracted by the LLM.
   # Providing a clear name and description for each label is crucial for
   # guiding the model to make accurate and consistent extractions.
-  entity_labels:
-    - name: "HALL_presente"
-      description: "hallazgos presentes, observaciones de posible importancia patológica. En la gran mayoría de los casos son sólo una palabra, tales como: 'nódulo', 'microcalcificaciones', 'quistes', 'asimetría', etc. En casos particulares, se requiere más de una palabra, como 'clips quirúrgicos' o 'imágenes espiculadas'."
-    - name: "HALL_ausente"
-      description: "hallazgos ausentes, menciones de hallazgos no presentes, se marca el mismo tipo de palabras que en HALL_presente, pero que hayan sido negadas."
-    - name: "CARACT"
-      description: "características asociadas a hallazgos presentes o ausentes, tales como: 'isodenso', 'agrupadas', 'bordes bien definidos', etc."
-    - name: "CUAD"
-      description: "cuadrante de la mama, tales como: 'cuadrante superior interno', 'cuadrante inferoexterno', etc."
-    - name: "LAT"
-      description: "lateralidad de la mama, puede ser 'derecha', 'izquierda', 'bilateral', 'ambas mamas', etc."
-    - name: "REG"
-      description: "región de la mama, puede ser 'tercio superior', 'regiones axilares', etc."
-    - name: "DENS"
-      description: "frases que se refieran a características generales de la densidad mamaria."
+  relation_labels:
+  - name: "ubicar"
+    description: "va desde una entidad CUAD, REG o LAT hacia un HALL_presente o HALL_ausente. Se utiliza para especificar la ubicación de un hallazgo."
+  - name: "describir"
+    description: "va desde una entidad CARACT hacia una entidad HALL_presente o HALL_ausente. Se utiliza para especificar características de un hallazgo."

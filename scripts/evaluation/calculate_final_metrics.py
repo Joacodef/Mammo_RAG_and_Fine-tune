@@ -118,33 +118,89 @@ def calculate_ner_metrics(predictions: list) -> dict:
 
     return report
 
-def calculate_finetuned_re_metrics(predictions: list, config: dict) -> dict:
+def calculate_re_metrics(predictions: list) -> dict:
     """
-    Calculates RE metrics for fine-tuned models, ignoring the 'No_Relation' class.
+    Calculates RE metrics by comparing sets of relation dictionaries.
+    This function serves as the unified metric calculator for both fine-tuned and RAG models.
+
+    Args:
+        predictions (list): The list of prediction records. Each record must contain
+                            'true_relations' and 'predicted_relations' keys.
+
+    Returns:
+        dict: A classification report dictionary.
     """
-    # Flatten the lists of labels from all records, as each record contains multiple instances.
-    true_labels_flat = [label for record in predictions for label in record.get('true_labels', [])]
-    pred_labels_flat = [label for record in predictions for label in record.get('predicted_labels', [])]
+    relation_metrics = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0})
 
-    # Get the full list of relation labels from the config to build the correct mapping
-    all_relation_labels = config.get('model', {}).get('relation_labels', [])
-    if not all_relation_labels:
-        return {} # Return empty report if no labels are defined
+    for record in predictions:
+        # Convert relations to a set of tuples for comparison: (from_id, to_id, type)
+        true_relations_set = {
+            (r['from_id'], r['to_id'], r['type']) for r in record['true_relations']
+        }
+        predicted_relations_set = {
+            (r['from_id'], r['to_id'], r['type']) for r in record['predicted_relations']
+        }
 
-    relation_map = {label: i for i, label in enumerate(all_relation_labels)}
+        tp = true_relations_set.intersection(predicted_relations_set)
+        fp = predicted_relations_set - true_relations_set
+        fn = true_relations_set - predicted_relations_set
 
-    # Determine which labels to include in the report (all except 'No_Relation')
-    labels_to_include = [label for label in all_relation_labels if label != "No_Relation"]
-    label_ids_to_include = [relation_map[label] for label in labels_to_include]
+        # Aggregate statistics per relation type
+        for _, _, rel_type in tp:
+            relation_metrics[rel_type]['tp'] += 1
+        for _, _, rel_type in fp:
+            relation_metrics[rel_type]['fp'] += 1
+        for _, _, rel_type in fn:
+            relation_metrics[rel_type]['fn'] += 1
 
-    return sklearn_classification_report(
-        true_labels_flat,
-        pred_labels_flat,
-        labels=label_ids_to_include,
-        target_names=labels_to_include,
-        output_dict=True,
-        zero_division=0
-    )
+    # --- Calculate the final report from the aggregated statistics ---
+    report = {}
+    all_tp, all_fp, all_fn = 0, 0, 0
+    total_support = 0
+
+    sorted_labels = sorted(relation_metrics.keys())
+    for label in sorted_labels:
+        tp = relation_metrics[label]['tp']
+        fp = relation_metrics[label]['fp']
+        fn = relation_metrics[label]['fn']
+        support = tp + fn
+
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        report[label] = {
+            'precision': precision,
+            'recall': recall,
+            'f1-score': f1,
+            'support': support
+        }
+        all_tp += tp
+        all_fp += fp
+        all_fn += fn
+        total_support += support
+
+    # Calculate micro average
+    micro_precision = all_tp / (all_tp + all_fp) if (all_tp + all_fp) > 0 else 0
+    micro_recall = all_tp / (all_tp + all_fn) if (all_tp + all_fn) > 0 else 0
+    micro_f1 = 2 * (micro_precision * micro_recall) / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
+
+    report['micro avg'] = {
+        'precision': micro_precision,
+        'recall': micro_recall,
+        'f1-score': micro_f1,
+        'support': total_support
+    }
+
+    # Calculate weighted average
+    report['weighted avg'] = {
+        'precision': sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'recall': sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'f1-score': sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'support': total_support
+    }
+
+    return report
 
 def aggregate_metrics(reports: list) -> dict:
     """
@@ -231,9 +287,7 @@ def process_single_file(prediction_path: str, eval_type: str, config_path: str) 
     if eval_type in ['ner', 'rag']:
         report = calculate_ner_metrics(predictions)
     elif eval_type == 're':
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        report = calculate_finetuned_re_metrics(predictions, config)
+        report = calculate_re_metrics(predictions)
     else:
         raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'ner', 'rag', or 're'.")
 

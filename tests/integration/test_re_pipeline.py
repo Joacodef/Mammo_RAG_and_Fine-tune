@@ -79,6 +79,16 @@ def re_test_data():
             "relations": [
                 {"from_id": 5, "to_id": 6, "type": "ubicar"}
             ]
+        },
+        {
+            "text": "Microcalcificaciones agrupadas.",
+            "entities": [
+                {"id": 7, "label": "HALL", "start_offset": 0, "end_offset": 20},
+                {"id": 8, "label": "CARACT", "start_offset": 21, "end_offset": 31}
+            ],
+            "relations": [
+                {"from_id": 7, "to_id": 8, "type": "describir"}
+            ]
         }
     ]
 
@@ -150,8 +160,8 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
 
     # --- 5. Assert Prediction Outputs ---
     output_dir = Path(evaluation_config['output_dir'])
-    expected_prediction_file = output_dir / f"raw_predictions_{expected_model_dir.name}.jsonl"
-    assert expected_prediction_file.exists(), "Raw RE prediction file was not created."
+    expected_prediction_file = output_dir / f"predictions_{expected_model_dir.name}.jsonl"
+    assert expected_prediction_file.exists(), "Decoded RE prediction file was not created."
     print("--- RE Prediction Generation Successful and Artifacts Verified ---")
 
     # --- 6. Run Metrics Calculation ---
@@ -165,7 +175,7 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
         prediction_path=str(expected_prediction_file),
         prediction_dir=None,
         eval_type='re',
-        config_path=str(training_config_path),
+        config_path=None, # Config path is not needed for unified RE evaluation
         output_path=str(final_metrics_path)
     )
 

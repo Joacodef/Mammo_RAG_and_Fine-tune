@@ -61,6 +61,7 @@ def workflow_configs(tmp_path_factory):
 
     # --- RAG Config ---
     rag_config = {
+        'task': 'ner',
         'llm': {
             'provider': 'openai',
             'openai': {'model': 'mock-gpt-model', 'temperature': 0.0}
