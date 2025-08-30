@@ -385,7 +385,14 @@ def main(config_path: str, resume_dir: Optional[str] = None):
     else:        
         base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_output_dir = base_output_dir / task / timestamp
+        
+        # Extract the training data partition name (e.g., 'train-50', 'train-all')
+        source_data_path = Path(config.get('vector_db', {}).get('source_data_path', ''))
+        partition_name = source_data_path.parent.parent.name if source_data_path else "unknown_partition"
+
+        n_examples = str(config.get('rag_prompt', {}).get('n_examples', 0)) + "-shot"
+
+        run_output_dir = base_output_dir / task / n_examples / Path(str(partition_name) + "_" + timestamp)
         run_output_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"Starting new RAG-{task} prediction run. Outputs will be saved in: {run_output_dir}")
