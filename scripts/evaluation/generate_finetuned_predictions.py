@@ -305,13 +305,20 @@ if __name__ == '__main__':
         required=True, 
         help='Path to the YAML configuration file for evaluation.'
     )
+
+    parser.add_argument(
+        '--model-dir',
+        type=str,
+        required=True,
+        help="Path to the directory containing the trained model samples (e.g., 'output/models/ner/train-50/20240828_150000')."
+    )
     
     args = parser.parse_args()
     
     with open(args.config_path, 'r') as f:
         base_config = yaml.safe_load(f)
 
-    model_dir = Path(base_config['model_dir'])
+    model_dir = Path(args.model_dir)
     sample_dirs = sorted([d for d in model_dir.iterdir() if d.is_dir() and d.name.startswith('sample-')])
 
     if not sample_dirs:
