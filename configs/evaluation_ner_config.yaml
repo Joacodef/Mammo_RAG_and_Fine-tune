@@ -1,6 +1,6 @@
 # configs/evaluation_ner_config.yaml
 # Task type to guide the evaluation script
-task: "ner"
+task: ner
 
 # Path to the directory containing the fine-tuned NER model.
 model_dir: 'output/models/ner/train-all/20250828_191228'

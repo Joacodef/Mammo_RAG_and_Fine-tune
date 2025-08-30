@@ -2,7 +2,7 @@
 # This file centralizes settings for the LLM provider, vector database,
 # and prompting strategies for the RE task.
 
-"task": "re"
+task: re
 
 # Test file
 test_file: "data/processed/test.jsonl"

@@ -1,6 +1,6 @@
 # configs/evaluation_re_config.yaml
 # Task type to guide the evaluation script
-task: "re"
+task: re
 
 # Path to the directory containing the fine-tuned RE model.
 model_dir: 'output/models/re/train-50/20250829_065713/'
