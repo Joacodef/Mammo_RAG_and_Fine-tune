@@ -277,12 +277,12 @@ def process_single_file(prediction_path: str, eval_type: str) -> dict:
     """Processes a single prediction file and returns its metrics report."""
     predictions = load_predictions(prediction_path)
 
-    if eval_type in ['ner', 'rag']:
+    if eval_type == 'ner':
         report = calculate_ner_metrics(predictions)
     elif eval_type == 're':
         report = calculate_re_metrics(predictions)
     else:
-        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'ner', 'rag', or 're'.")
+        raise ValueError(f"Unknown evaluation type: '{eval_type}'. Must be 'ner' or 're'.")
 
     return convert_numpy_types(report)
 
@@ -308,7 +308,7 @@ if __name__ == '__main__':
         '--type',
         type=str,
         required=True,
-        choices=['ner', 'rag', 're'],
+        choices=['ner', 'rag'],
         help="The type of task evaluation."
     )
     parser.add_argument(
