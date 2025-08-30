@@ -1,4 +1,3 @@
-# configs/evaluation_ner_config.yaml
 # Task type to guide the evaluation script
 task: ner
 

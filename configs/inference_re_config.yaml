@@ -1,4 +1,3 @@
-# configs/evaluation_re_config.yaml
 # Task type to guide the evaluation script
 task: re
 
