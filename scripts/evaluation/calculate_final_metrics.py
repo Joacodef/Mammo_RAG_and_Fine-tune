@@ -314,10 +314,19 @@ if __name__ == '__main__':
     parser.add_argument(
         '--output-path',
         type=str,
-        required=True,
         help="Path to save the final JSON metrics report."
     )
 
     args = parser.parse_args()
+
+    # --- Set default output path if not provided ---
+    if not args.output_path:
+        if args.prediction_dir:
+            # Default to 'aggregate_metrics.json' inside the prediction directory
+            args.output_path = Path(args.prediction_dir) / 'aggregate_metrics.json'
+        else:
+            # Default to a metrics file in the same directory as the prediction file
+            input_path = Path(args.prediction_path)
+            args.output_path = input_path.parent / f"final_metrics_{input_path.stem}.json"
 
     main(args.prediction_path, args.prediction_dir, args.type, args.output_path)
