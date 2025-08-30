@@ -40,7 +40,7 @@ def format_ner_prompt(new_report_text: str, examples: list, entity_definitions: 
     # Format the entity definitions into a string
     entity_definitions_str = ""
     for entity in entity_definitions:
-        entity_definitions_str += f"- nombre: \"{entity['name']}\"\n  descripcion: \"{entity['description']}\"\n"
+        entity_definitions_str += f"- nombre: \"{entity['name']}\"\n - descripcion: \"{entity['description']}\"\n"
 
     # Create a set of valid label names for efficient lookup
     valid_labels = {entity['name'] for entity in entity_definitions}
@@ -81,7 +81,7 @@ def format_re_prompt(
     # Format the relation definitions into a string
     relation_definitions_str = ""
     for rel in relation_definitions:
-        relation_definitions_str += f"- nombre: \"{rel['name']}\"\n  descripcion: \"{rel['description']}\"\n"
+        relation_definitions_str += f"- nombre: \"{rel['name']}\"\n- descripcion: \"{rel['description']}\"\n"
 
     # Format the few-shot examples into a string for RE
     examples_str = ""
@@ -375,19 +375,20 @@ def main(config_path: str, resume_dir: Optional[str] = None):
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
+    task = config.get("task", "ner")
+
     if resume_dir:
         run_output_dir = Path(resume_dir)
         if not run_output_dir.exists():
             raise FileNotFoundError(f"Resume directory not found: {resume_dir}")
-        print(f"Resuming RAG prediction run in existing directory: {run_output_dir}")
-    else:
-        task = config.get("task", "ner")
+        print(f"Resuming RAG-{task} prediction run in existing directory: {run_output_dir}")
+    else:        
         base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_output_dir = base_output_dir / task / timestamp
         run_output_dir.mkdir(parents=True, exist_ok=True)
         
-        print(f"Starting new RAG prediction run. Outputs will be saved in: {run_output_dir}")
+        print(f"Starting new RAG-{task} prediction run. Outputs will be saved in: {run_output_dir}")
         # Copy the config only for new runs to avoid overwriting
         shutil.copy(config_path, run_output_dir / "rag_config.yaml")
 
@@ -405,7 +406,7 @@ def main(config_path: str, resume_dir: Optional[str] = None):
 
         shot_type = f"{n_examples}-shot"
 
-        trace_name = f"RAG Prediction Run - {db_size_name} - {shot_type}"
+        trace_name = f"RAG_{task} Prediction Run - {db_size_name} - {shot_type}"
 
         trace_metadata = {
             "db_size": db_size_name,
