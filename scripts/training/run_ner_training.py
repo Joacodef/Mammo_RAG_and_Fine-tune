@@ -43,7 +43,8 @@ def run_batch_training(config_path, partition_dir):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # This is the unique parent directory for this entire batch training run
-    run_specific_output_dir = base_output_dir / "ner" / data_partition_name / timestamp
+    run_folder_name = f"{data_partition_name}_{timestamp}"
+    run_specific_output_dir = base_output_dir / "ner" / run_folder_name
     run_specific_output_dir.mkdir(parents=True, exist_ok=True)
     print(f"All models for this run will be saved in subfolders of: {run_specific_output_dir}")
 

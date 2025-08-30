@@ -324,14 +324,13 @@ if __name__ == '__main__':
     if not sample_dirs:
         raise FileNotFoundError(f"No 'sample-*' directories found in '{model_dir}'.")
 
-    # Create a unique, timestamped output directory for this evaluation run
-    train_size_folder_name = model_dir.parent.name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir_timestamped = Path(base_config['output_dir']) / train_size_folder_name / timestamp
-    output_dir_timestamped.mkdir(parents=True, exist_ok=True)
+    # Create an output directory that matches the training run's directory name
+    run_folder_name = model_dir.name
+    output_dir_for_run = Path(base_config['output_dir']) / run_folder_name
+    output_dir_for_run.mkdir(parents=True, exist_ok=True)
     
-    print(f"All prediction outputs for this run will be saved in: {output_dir_timestamped}")
-    shutil.copy(args.config_path, output_dir_timestamped / "evaluation_config.yaml")
+    print(f"All prediction outputs for this run will be saved in: {output_dir_for_run}")
+    shutil.copy(args.config_path, output_dir_for_run / "evaluation_config.yaml")
 
     print(f"Found {len(sample_dirs)} model samples to generate predictions for.")
 
@@ -340,7 +339,7 @@ if __name__ == '__main__':
         
         sample_config = base_config.copy()
         sample_config['model_path'] = str(sample_path)
-        sample_config['output_dir'] = str(output_dir_timestamped)
+        sample_config['output_dir'] = str(output_dir_for_run)
         
         run_prediction_and_save(sample_config)
 
