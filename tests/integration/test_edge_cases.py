@@ -63,18 +63,18 @@ def test_training_skips_empty_data_file(tmp_path, ner_edge_case_config):
     with open(ner_edge_case_config, 'r') as f:
         config = yaml.safe_load(f)
     
-    output_dir = Path(config['paths']['output_dir']) / "ner" / "train-empty"
+    # Correct the base directory path to search for the timestamped folder
+    base_output_dir = Path(config['paths']['output_dir']) / "ner"
     
-    # The parent output directory for the run should exist
-    assert output_dir.exists(), "The parent output directory for the run was not created."
+    # Find the timestamped directory created by the run. Its name will start with the partition name.
+    run_dirs = [d for d in base_output_dir.iterdir() if d.is_dir() and d.name.startswith("train-empty")]
     
-    # Find the single timestamped directory created by the training run
-    timestamp_dirs = [d for d in output_dir.iterdir() if d.is_dir()]
-    assert len(timestamp_dirs) == 1, "Expected a single timestamped output directory for the run."
-    run_output_dir = timestamp_dirs[0]
+    # Assert that a single run directory was created
+    assert len(run_dirs) == 1, "Expected a single timestamped output directory for the run."
+    run_output_dir = run_dirs[0]
 
     # Assert that the timestamped run directory contains NO sample subdirectories
-    sample_outputs = [d for d in run_output_dir.iterdir() if d.is_dir()]
+    sample_outputs = [d for d in run_output_dir.iterdir() if d.is_dir() and d.name.startswith('sample-')]
     assert len(sample_outputs) == 0, "A model directory was created for an empty sample, which is incorrect."
 
     print("--- Test Successful: Script correctly skipped the empty sample. ---")

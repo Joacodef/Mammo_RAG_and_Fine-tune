@@ -102,15 +102,17 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
 
     # --- 3. Assert Training Outputs ---
     # The output path now includes a timestamp, so we must find it dynamically.
-    base_output_dir = Path(ner_integration_config['paths']['output_dir']) / "ner" / "train-2"
-    
+    base_output_dir = Path(ner_integration_config['paths']['output_dir']) / "ner"
+
     # Find the single timestamped directory created by the training run
-    timestamp_dirs = [d for d in base_output_dir.iterdir() if d.is_dir()]
-    assert len(timestamp_dirs) == 1, "Expected a single timestamped output directory."
-    
+    # It will start with the partition name, e.g., "train-2"
+    run_dirs = [d for d in base_output_dir.iterdir() if d.is_dir() and d.name.startswith("train-2")]
+    assert len(run_dirs) == 1, "Expected a single timestamped training output directory starting with 'train-2'."
+    trained_run_dir = run_dirs[0]
+
     # Define the final path to the specific sample model
-    expected_model_dir = timestamp_dirs[0] / "sample-1"
-    
+    expected_model_dir = trained_run_dir / "sample-1"
+
     assert expected_model_dir.exists(), f"Model output directory was not created at {expected_model_dir}."
     
     # Check for either the standard PyTorch weights file or the SafeTensors equivalent
@@ -153,16 +155,15 @@ def test_ner_training_and_evaluation_pipeline(tmp_path, ner_integration_config, 
     print("--- Prediction Generation Successful and Artifacts Verified ---")
 
     # --- 6. Run Metrics Calculation ---
-    print("\n--- Running Metrics Calculation ---")
+    print("\n--- Running NER Metrics Calculation ---")
     metrics_output_dir = tmp_path / "output" / "final_metrics_ner"
     final_metrics_path = metrics_output_dir / "final_metrics.json"
 
-    # Call the unified metrics calculation script, removing the obsolete 'test_file' arg.
+    # Call the unified metrics calculation script with the correct eval_type
     calculate_metrics(
         prediction_path=str(expected_prediction_file),
         prediction_dir=None,
         eval_type='ner',
-        config_path=str(training_config_path),
         output_path=str(final_metrics_path)
     )
 

@@ -126,14 +126,16 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
     )
 
     # The output path now includes a timestamp, so we must find it dynamically.
-    base_output_dir = Path(re_integration_config['paths']['output_dir']) / "re" / "train-2"
+    base_output_dir = Path(re_integration_config['paths']['output_dir']) / "re"
 
     # Find the single timestamped directory created by the training run
-    timestamp_dirs = [d for d in base_output_dir.iterdir() if d.is_dir()]
-    assert len(timestamp_dirs) == 1, "Expected a single timestamped output directory for the RE training run."
-
+    # It will start with the partition name, e.g., "train-2"
+    run_dirs = [d for d in base_output_dir.iterdir() if d.is_dir() and d.name.startswith("train-2")]
+    assert len(run_dirs) == 1, "Expected a single timestamped training output directory starting with 'train-2'."
+    trained_run_dir = run_dirs[0]
+    
     # Define the final path to the specific sample model
-    expected_model_dir = timestamp_dirs[0] / "sample-1"
+    expected_model_dir = trained_run_dir / "sample-1"
     
     assert expected_model_dir.exists(), "RE Model output directory was not created."
     weights_file_exists = (
@@ -175,7 +177,6 @@ def test_re_training_and_evaluation_pipeline(tmp_path, re_integration_config, re
         prediction_path=str(expected_prediction_file),
         prediction_dir=None,
         eval_type='re',
-        config_path=None, # Config path is not needed for unified RE evaluation
         output_path=str(final_metrics_path)
     )
 

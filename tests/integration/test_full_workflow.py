@@ -158,7 +158,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     assert Path(configs["rag"]["vector_db"]["index_path"]).exists()
     print("--- Vector Database Build Successful ---")
 
-    # --- 3. Train Fine-Tuned Model ---
+        # --- 3. Train Fine-Tuned Model ---
     print("\n--- (3/5) Running Fine-Tuned NER Training ---")
     training_config_path = tmp_path / "training_config.yaml"
     with open(training_config_path, 'w') as f:
@@ -168,8 +168,11 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     run_batch_training(config_path=str(training_config_path), partition_dir=partition_dir)
 
     # Dynamically find the timestamped output directory for the trained model
-    base_model_output_dir = Path(configs["training"]["paths"]["output_dir"]) / "ner" / "train-2"
-    timestamp_dirs = [d for d in base_model_output_dir.iterdir() if d.is_dir()]
+    base_model_output_dir = Path(configs["training"]["paths"]["output_dir"]) / "ner"
+    
+    # Find the single timestamped directory created by the training run which starts with 'train-2'
+    timestamp_dirs = [d for d in base_model_output_dir.iterdir() if d.is_dir() and d.name.startswith("train-2")]
+
     assert len(timestamp_dirs) == 1, "Expected a single timestamped training output directory."
     trained_model_dir = timestamp_dirs[0] / "sample-1"
     assert trained_model_dir.exists(), "Trained model directory was not created."
@@ -182,8 +185,13 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     generate_rag_predictions_main(config_path=str(rag_config_path))
     rag_output_dir = Path(configs["rag"]["output_dir"])
     
-    # Find the timestamped run directory created by the script
-    rag_run_dirs = [d for d in (rag_output_dir / "ner").iterdir() if d.is_dir()]
+    # Correctly navigate into the 'ner' and 'n-shot' subdirectories
+    n_examples = configs["rag"]["rag_prompt"]["n_examples"]
+    shot_dir_name = f"{n_examples}-shot"
+    rag_base_output_dir = rag_output_dir / "ner" / shot_dir_name
+
+    # Find the single timestamped run directory created by the script
+    rag_run_dirs = [d for d in rag_base_output_dir.iterdir() if d.is_dir()]
     assert len(rag_run_dirs) == 1, "Expected a single RAG prediction output directory."
     
     # The new filename is predictions.jsonl
@@ -191,7 +199,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     assert rag_predictions_path.exists(), "RAG predictions file was not created."
     print("RAG predictions generated.")
 
-    # Fine-tuned predictions
+    # Fine-tuned predictions (logic remains the same, but uses the corrected `trained_model_dir` path)
     finetuned_eval_output_dir = tmp_path / "output" / "finetuned_eval_results"
     evaluation_config = {
         'task': 'ner',
@@ -214,8 +222,7 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
     calculate_metrics(
         prediction_path=str(rag_predictions_path),
         prediction_dir=None,
-        eval_type='rag',
-        config_path=str(rag_config_path),
+        eval_type='ner', # Changed from 'rag' to 'ner' as per calculate_final_metrics.py
         output_path=str(rag_metrics_path)
     )
     assert rag_metrics_path.exists(), "RAG metrics file was not created."
@@ -227,7 +234,6 @@ def test_full_experiment_workflow(mock_openai_client, mock_save_log, setup_workf
         prediction_path=str(finetuned_predictions_path),
         prediction_dir=None,
         eval_type='ner',
-        config_path=str(training_config_path),
         output_path=str(finetuned_metrics_path)
     )
     assert finetuned_metrics_path.exists(), "Fine-tuned metrics file was not created."

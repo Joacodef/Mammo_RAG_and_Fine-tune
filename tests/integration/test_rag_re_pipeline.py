@@ -113,12 +113,20 @@ def test_rag_re_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
+    # The script creates a nested directory: output/{task}/{n-shot}/{run_name}/
     output_dir = Path(config['output_dir'])
-    run_dirs = [d for d in (output_dir / "re").iterdir() if d.is_dir()]
-    assert len(run_dirs) == 1
+    task = config.get('task', 're')
+    n_examples = str(config.get('rag_prompt', {}).get('n_examples', 0)) + "-shot"
+    
+    # This is the directory where the timestamped run folder is created
+    run_base_dir = output_dir / task / n_examples
+    
+    # Find the single timestamped directory created by the script
+    run_dirs = [d for d in run_base_dir.iterdir() if d.is_dir()]
+    assert len(run_dirs) == 1, "Expected a single timestamped RAG output directory."
     
     prediction_file = run_dirs[0] / "predictions.jsonl"
-    assert prediction_file.exists()
+    assert prediction_file.exists(), f"RAG prediction file was not created at {prediction_file}"
 
     with open(prediction_file, 'r') as f:
         predictions = [json.loads(line) for line in f]
@@ -131,7 +139,6 @@ def test_rag_re_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag
         prediction_path=str(prediction_file),
         prediction_dir=None,
         eval_type='re',
-        config_path=None, # Not needed for unified RE metrics
         output_path=str(metrics_path)
     )
     assert metrics_path.exists()
