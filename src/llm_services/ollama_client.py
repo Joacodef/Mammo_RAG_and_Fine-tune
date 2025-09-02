@@ -54,8 +54,6 @@ class OllamaClient(BaseLLMClient):
         generation = None
         response_content = ""
         try:
-            # Langfuse tracing is not yet implemented for the Ollama client,
-            # but the structure is here to support it in the future.
             if trace:
                  with trace.start_as_current_generation(
                     name=f"{task} Prediction (Report {report_index})",
@@ -67,16 +65,20 @@ class OllamaClient(BaseLLMClient):
             else:
                 response_content = self.client.invoke(prompt)
 
-            # The raw response is a string, which we expect to be a JSON list.
-            response_dict = json.loads(response_content)
+            parsed_response = json.loads(response_content)
             
-            # The prompt asks the model to return a list inside a JSON object.
-            # We find the first value in the dictionary that is a list.
-            for value in response_dict.values():
-                if isinstance(value, list):
-                    return value
+            # If the model returns a JSON list directly, return it.
+            if isinstance(parsed_response, list):
+                return parsed_response
 
-            print(f"Warning: Model returned valid JSON, but it did not contain a list of items. Response: {response_content}")
+            # If the model returns a JSON object containing a list, find and return the list.
+            if isinstance(parsed_response, dict):
+                for value in parsed_response.values():
+                    if isinstance(value, list):
+                        return value
+            
+            # If the format is unexpected, log a warning and return empty.
+            print(f"Warning: Model returned valid JSON, but it was not a list or a dict containing a list. Response: {response_content}")
             return []
 
         except json.JSONDecodeError:
@@ -91,15 +93,3 @@ class OllamaClient(BaseLLMClient):
             if generation:
                 generation.update(level='ERROR', status_message=error_message)
             return []
-
-    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
-        """
-        Sends a prompt to the Ollama model and returns the extracted entities for an NER task.
-        """
-        return self._get_prediction(prompt, trace, report_index, task="NER")
-
-    def get_re_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
-        """
-        Sends a prompt to the Ollama model and returns the extracted relations for an RE task.
-        """
-        return self._get_prediction(prompt, trace, report_index, task="RE")

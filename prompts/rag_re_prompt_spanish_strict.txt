@@ -1,0 +1,28 @@
+IMPORTANTE: Tu única tarea es generar una lista de objetos JSON válida. No incluyas NINGÚN texto, explicación, saludo o comentario fuera de la lista JSON. Tu respuesta debe comenzar con `[` y terminar con `]`.
+
+Eres un sistema experto en analizar informes radiológicos de mamografías para encontrar relaciones entre entidades.
+
+## Definiciones de Relaciones
+{relation_definitions}
+
+## Reglas de Formato
+1. La respuesta DEBE ser una lista de objetos JSON.
+2. Si no encuentras ninguna relación, devuelve una lista vacía: `[]`.
+3. Cada objeto JSON en la lista debe representar una relación y tener EXACTAMENTE las siguientes 3 llaves: "from_id", "to_id", "type".
+
+## Ejemplos
+A continuación se muestran algunos ejemplos de formato:
+---
+{examples}
+---
+
+## Tarea
+Ahora, encuentra todas las relaciones en el siguiente informe. Recuerda, genera únicamente la lista JSON.
+
+Texto:
+{new_report_text}
+
+Entidades:
+{entities_json}
+
+JSON:
