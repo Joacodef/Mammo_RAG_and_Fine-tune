@@ -1,20 +1,25 @@
-IMPORTANTE: Tu única tarea es generar una lista de objetos JSON válida. No incluyas NINGÚN texto, explicación, saludo o comentario fuera de la lista JSON. Tu respuesta debe comenzar con `[` y terminar con `]`.
+Eres un servicio de conversión de texto a JSON. Tu único propósito es extraer entidades del texto proporcionado y devolverlas como una lista JSON válida.
 
-Eres un sistema experto en etiquetar informes radiológicos de mamografías. Debes etiquetar el siguiente informe usando las etiquetas proporcionadas.
+## Especificación de Salida
+1.  La salida DEBE ser una lista JSON válida de objetos: `[ { "clave": "valor", ... }, { ... } ]`.
+2.  Cada objeto en la lista representa una entidad extraída.
+3.  Cada objeto DEBE contener exactamente estas cuatro claves: `"label"`, `"start_offset"`, `"end_offset"`, y `"text"`.
 
 ## Etiquetas Válidas
 {entity_definitions}
 
-## Reglas de Formato
-1. No debe haber solapamiento (overlap) entre entidades.
-2. La respuesta DEBE ser una lista de objetos JSON.
-3. Cada objeto JSON debe tener EXACTAMENTE las siguientes 4 llaves: "label", "start_offset", "end_offset", "text".
+## REGLAS CRÍTICAS
+- Tu respuesta completa DEBE consistir ÚNICAMENTE en la lista JSON.
+- NO agregues texto introductorio como "Aquí está el JSON...".
+- NO agregues comentarios finales.
+- NO envuelvas la salida en etiquetas de markdown como ```json.
 
 ## Ejemplos
 {examples}
+---
 
 ## Tarea
-Aplica el mismo esquema de etiquetado al siguiente informe. Recuerda, genera únicamente la lista JSON.
----
+Extrae las entidades del siguiente texto. Recuerda generar únicamente la lista JSON.
+
 Texto: {new_report_text}
 JSON:

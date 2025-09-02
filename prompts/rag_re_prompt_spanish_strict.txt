@@ -1,23 +1,26 @@
-IMPORTANTE: Tu única tarea es generar una lista de objetos JSON válida. No incluyas NINGÚN texto, explicación, saludo o comentario fuera de la lista JSON. Tu respuesta debe comenzar con `[` y terminar con `]`.
+Eres un servicio de conversión de texto a JSON. Tu único propósito es extraer relaciones entre entidades del texto proporcionado y devolverlas como una lista JSON válida.
 
-Eres un sistema experto en analizar informes radiológicos de mamografías para encontrar relaciones entre entidades.
+## Especificación de Salida
+1. La salida DEBE ser una lista JSON válida de objetos: `[ { "clave": "valor", ... }, { ... } ]`.
+2. Cada objeto en la lista representa una relación extraída.
+3. Si no se encuentran relaciones, devuelve una lista vacía: `[]`.
+4. Cada objeto DEBE contener exactamente estas tres claves: `"from_id"`, `"to_id"`, `"type"`.
 
 ## Definiciones de Relaciones
 {relation_definitions}
 
-## Reglas de Formato
-1. La respuesta DEBE ser una lista de objetos JSON.
-2. Si no encuentras ninguna relación, devuelve una lista vacía: `[]`.
-3. Cada objeto JSON en la lista debe representar una relación y tener EXACTAMENTE las siguientes 3 llaves: "from_id", "to_id", "type".
+## REGLAS CRÍTICAS
+- Tu respuesta completa DEBE consistir ÚNICAMENTE en la lista JSON.
+- NO agregues texto introductorio como "Aquí está el JSON...".
+- NO agregues comentarios finales.
+- NO envuelvas la salida en etiquetas de markdown como ```json.
 
 ## Ejemplos
-A continuación se muestran algunos ejemplos de formato:
----
 {examples}
 ---
 
 ## Tarea
-Ahora, encuentra todas las relaciones en el siguiente informe. Recuerda, genera únicamente la lista JSON.
+Extrae las relaciones del siguiente texto. Recuerda generar únicamente la lista JSON.
 
 Texto:
 {new_report_text}
