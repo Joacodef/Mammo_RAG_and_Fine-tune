@@ -93,3 +93,15 @@ class OllamaClient(BaseLLMClient):
             if generation:
                 generation.update(level='ERROR', status_message=error_message)
             return []
+
+    def get_ner_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
+        """
+        Sends a prompt to the Ollama model and returns the extracted entities for an NER task.
+        """
+        return self._get_prediction(prompt, trace, report_index, task="NER")
+
+    def get_re_prediction(self, prompt: str, trace: Optional[Any] = None, report_index: int = -1) -> List[Dict[str, Any]]:
+        """
+        Sends a prompt to the Ollama model and returns the extracted relations for an RE task.
+        """
+        return self._get_prediction(prompt, trace, report_index, task="RE")
