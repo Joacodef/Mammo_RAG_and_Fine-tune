@@ -11,13 +11,11 @@ test_file: "data/processed/test.jsonl"
 llm:
   # The active provider to be used by the factory.
   # This key determines which client implementation will be loaded.
-  # Supported options: "openai", "aws_sagemaker" (future)
+  # Supported options: "openai"
   provider: "openai"
 
   # --- Provider-Specific Configurations ---
 
-  # Settings for the OpenAI client.
-  # These are used only when provider is set to "openai".
   # Settings for the OpenAI client.
   # These are used only when provider is set to "openai".
   openai:
@@ -40,6 +38,25 @@ llm:
       # The multiplier to increase the timeout for each subsequent retry.
       # e.g., 1.5 means the next timeout will be 1.5x the previous one.
       backoff_factor: 1.5
+
+
+  # Settings for the Ollama client.
+  # These are used only when provider is set to "ollama".
+  ollama:
+    # The name of the model to use from your local Ollama server.
+    # Examples: "llama2", "gpt-oss"
+    model: "llama2"
+
+    # The base URL of your Ollama server.
+    base_url: "http://localhost:11434"
+
+    # Optional parameters to pass to the Ollama model.
+    # These can be used to control aspects like temperature, top_p, etc.
+    # For a full list of parameters, see the LangChain-Ollama documentation.
+    llm_parameters:
+      # temperature: 0.1
+      # top_k: 40
+      # top_p: 0.9
 
 # --- Vector Database Configuration ---
 vector_db:

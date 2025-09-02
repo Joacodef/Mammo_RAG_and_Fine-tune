@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.llm_services.base_client import BaseLLMClient
 from src.llm_services.openai_client import OpenAIClient
+from src.llm_services.ollama_client import OllamaClient
 
 def get_llm_client(
     config_path: str = "configs/rag_config.yaml",
@@ -50,12 +51,10 @@ def get_llm_client(
         return OpenAIClient(
             config=provider_config
         )
-    
-    # Placeholder for future clients like AWS SageMaker
-    # elif provider == "aws_sagemaker":
-    #     provider_config = config.get("llm", {}).get("aws_sagemaker", {})
-    #     # from .aws_sagemaker_client import AWSSageMakerClient
-    #     # return AWSSageMakerClient(config=provider_config)
-    
+    elif provider == "ollama":
+        provider_config = config.get("llm", {}).get("ollama", {})
+        return OllamaClient(
+            config=provider_config
+        )
     else:
-        raise ValueError(f"Unsupported LLM provider: '{provider}'. Supported providers are ['openai'].")
+        raise ValueError(f"Unsupported LLM provider: '{provider}'. Supported providers are ['openai', 'ollama'].")
