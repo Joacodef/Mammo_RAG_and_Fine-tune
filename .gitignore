@@ -10,6 +10,8 @@ __pycache__
 
 *.cmd
 
+*.sh
+
 my_configs/
 
 run_all_metrics.py
