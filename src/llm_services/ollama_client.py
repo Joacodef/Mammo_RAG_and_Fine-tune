@@ -1,5 +1,6 @@
 # src/llm_services/ollama_client.py
 import json
+import re
 from typing import List, Dict, Any, Optional
 
 # Add the project root to the Python path to allow for absolute imports
@@ -61,11 +62,24 @@ class OllamaClient(BaseLLMClient):
                     input=prompt
                 ) as generation:
                     response_content = self.client.invoke(prompt)
-                    generation.update(output=response_content)
+                    # Log the raw, potentially messy, model output first
+                    generation.update(output={"raw_output": response_content})
             else:
                 response_content = self.client.invoke(prompt)
 
-            parsed_response = json.loads(response_content)
+            # Use regex to find a JSON list or object within the response text
+            # This handles cases where the model adds conversational text around the JSON
+            json_match = re.search(r'\[.*\]|\{.*\}', response_content, re.DOTALL)
+            
+            if not json_match:
+                raise json.JSONDecodeError("No JSON array or object found in the model's response.", response_content, 0)
+            
+            json_string = json_match.group(0)
+            parsed_response = json.loads(json_string)
+
+            # Update the generation with the clean, parsed output for better observability
+            if generation:
+                generation.update(output=parsed_response)
             
             # If the model returns a JSON list directly, return it.
             if isinstance(parsed_response, list):
@@ -78,11 +92,11 @@ class OllamaClient(BaseLLMClient):
                         return value
             
             # If the format is unexpected, log a warning and return empty.
-            print(f"Warning: Model returned valid JSON, but it was not a list or a dict containing a list. Response: {response_content}")
+            print(f"Warning: Model returned valid JSON, but it was not a list or a dict containing a list. Response: {json_string}")
             return []
 
         except json.JSONDecodeError:
-            error_message = f"Failed to decode JSON from Ollama model response: {response_content}"
+            error_message = f"Failed to decode JSON from Ollama model response. Here is the raw output for the given text:\n {response_content}"
             print(f"Error: {error_message}")
             if generation:
                 generation.update(level='ERROR', status_message=error_message)
