@@ -9,7 +9,12 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.vector_db.sentence_embedder import SentenceEmbedder
 from src.vector_db.database_manager import DatabaseManager
 
-def main(config_path: str, force_rebuild: bool):
+def main(
+    config_path: str, 
+    force_rebuild: bool,
+    source_data_path_override: str = None,
+    index_path_override: str = None
+):
     """
     Main function to build the vector database.
 
@@ -20,6 +25,8 @@ def main(config_path: str, force_rebuild: bool):
         config_path (str): The path to the RAG configuration YAML file.
         force_rebuild (bool): If True, forces the index to be rebuilt even if
                               an existing index file is found.
+        source_data_path_override (str, optional): Path to source data, overrides config.
+        index_path_override (str, optional): Path to save index, overrides config.
     """
     print("--- Starting Vector Database Build Process ---")
     
@@ -34,12 +41,20 @@ def main(config_path: str, force_rebuild: bool):
 
     db_config = config.get('vector_db', {})
     embedding_model = db_config.get('embedding_model')
-    source_data_path = db_config.get('source_data_path')
-    index_path = db_config.get('index_path')
+    
+    # Prioritize command-line overrides, then config file, then None.
+    source_data_path = source_data_path_override or db_config.get('source_data_path')
+    index_path = index_path_override or db_config.get('index_path')
+    
+    # --- Log if overrides are used ---
+    if source_data_path_override:
+        print(f"Overriding 'source_data_path' with command-line value: {source_data_path}")
+    if index_path_override:
+        print(f"Overriding 'index_path' with command-line value: {index_path}")
 
     if not all([embedding_model, source_data_path, index_path]):
         print("Error: Missing required keys ('embedding_model', 'source_data_path', 'index_path') "
-              "in the 'vector_db' section of the config.")
+              "in the config or via command-line arguments.")
         return
 
     # --- 2. Initialize Components ---
@@ -74,6 +89,27 @@ if __name__ == '__main__':
         help='If set, the index will be rebuilt even if it already exists.'
     )
     
+    # --- NEW ARGUMENTS ---
+    parser.add_argument(
+        '--source-data-path',
+        type=str,
+        default=None,
+        help="Overrides the 'source_data_path' from the config file."
+    )
+    
+    parser.add_argument(
+        '--index-path',
+        type=str,
+        default=None,
+        help="Overrides the 'index_path' from the config file."
+    )
+    # --- END NEW ARGUMENTS ---
+    
     args = parser.parse_args()
     
-    main(args.config_path, args.force_rebuild)
+    main(
+        config_path=args.config_path, 
+        force_rebuild=args.force_rebuild,
+        source_data_path_override=args.source_data_path,
+        index_path_override=args.index_path
+    )
