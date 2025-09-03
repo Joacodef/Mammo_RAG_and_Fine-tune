@@ -262,21 +262,43 @@ def _run_re_prediction_loop(records_to_process, all_test_texts, results_file, ra
             f_out.write(json.dumps(result_line, ensure_ascii=False) + '\n')
 
 
-def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
+def run_predictions(
+    config_path: str, 
+    output_dir: Path, 
+    trace: Optional[Any],
+    index_path: Optional[str] = None, 
+    source_data_path: Optional[str] = None, 
+    n_examples: Optional[int] = None
+):
     """
     Executes the core prediction generation logic with incremental saving and resume capability.
-    
-    Args:
-        config_path (str): Path to the RAG configuration file.
-        output_dir (Path): The exact directory where results will be saved.
-        trace (Optional[Any]): The parent Langfuse trace object.
     """
     logging.info("--- Starting RAG Prediction Pipeline ---")
 
-    # --- 1. Load Configuration ---
+    # --- 1. Load Configuration & Apply Overrides ---
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     logging.info(f"Loaded configuration from: {config_path}")
+    
+    # --- OVERRIDE LOGIC ---
+    # Ensures nested dictionaries exist before trying to assign to them
+    if 'vector_db' not in config:
+        config['vector_db'] = {}
+    if 'rag_prompt' not in config:
+        config['rag_prompt'] = {}
+
+    if index_path is not None:
+        config['vector_db']['index_path'] = index_path
+        logging.info(f"Overriding 'index_path' with command-line value: {index_path}")
+    
+    if source_data_path is not None:
+        config['vector_db']['source_data_path'] = source_data_path
+        logging.info(f"Overriding 'source_data_path' with command-line value: {source_data_path}")
+
+    if n_examples is not None:
+        config['rag_prompt']['n_examples'] = n_examples
+        logging.info(f"Overriding 'n_examples' with command-line value: {n_examples}")
+    # --- END OVERRIDE LOGIC ---
 
     task = config.get("task")
     if not task or task not in ['ner', 're']:
@@ -285,6 +307,7 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     rag_config = config.get('rag_prompt', {})
     db_config = config.get('vector_db', {})
     test_file_path = config.get('test_file')
+
     prompt_template_path = rag_config.get('prompt_template_path')
 
     if not prompt_template_path:
@@ -359,7 +382,13 @@ def run_predictions(config_path: str, output_dir: Path, trace: Optional[Any]):
     logging.info("--- RAG Prediction Pipeline Finished Successfully ---")
 
 
-def main(config_path: str, resume_dir: Optional[str] = None):
+def main(
+    config_path: str, 
+    resume_dir: Optional[str] = None, 
+    index_path: Optional[str] = None, 
+    source_data_path: Optional[str] = None, 
+    n_examples: Optional[int] = None
+):
     """
     Sets up tracing, logging, and output directories, then runs the main prediction pipeline.
     """
@@ -375,6 +404,14 @@ def main(config_path: str, resume_dir: Optional[str] = None):
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
+    # Overrides n_examples from config if provided via command line
+    # This is needed here to create the correct output directory name
+    if n_examples is not None:
+        if 'rag_prompt' not in config:
+            config['rag_prompt'] = {}
+        config['rag_prompt']['n_examples'] = n_examples
+        logging.info(f"Overriding 'n_examples' for output path generation with: {n_examples}")
+
     task = config.get("task", "ner")
 
     if resume_dir:
@@ -386,17 +423,18 @@ def main(config_path: str, resume_dir: Optional[str] = None):
         base_output_dir = Path(config.get('output_dir', 'output/rag_results'))
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Extract the training data partition name (e.g., 'train-50', 'train-all')
-        source_data_path = Path(config.get('vector_db', {}).get('source_data_path', ''))
-        partition_name = source_data_path.parent.parent.name if source_data_path else "unknown_partition"
+        # Uses the potentially overridden source_data_path for naming
+        effective_source_path = source_data_path or config.get('vector_db', {}).get('source_data_path', '')
+        source_data_path_obj = Path(effective_source_path)
+        partition_name = source_data_path_obj.parent.parent.name if effective_source_path else "unknown_partition"
 
-        n_examples = str(config.get('rag_prompt', {}).get('n_examples', 0)) + "-shot"
+        # Uses the effective n_examples for naming
+        n_examples_str = str(config.get('rag_prompt', {}).get('n_examples', 0)) + "-shot"
 
-        run_output_dir = base_output_dir / task / n_examples / Path(str(partition_name) + "_" + timestamp)
+        run_output_dir = base_output_dir / task / n_examples_str / Path(str(partition_name) + "_" + timestamp)
         run_output_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"Starting new RAG-{task} prediction run. Outputs will be saved in: {run_output_dir}")
-        # Copy the config only for new runs to avoid overwriting
         shutil.copy(config_path, run_output_dir / "rag_config.yaml")
 
     # --- Langfuse Tracing (Optional) ---
@@ -404,35 +442,37 @@ def main(config_path: str, resume_dir: Optional[str] = None):
     if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
         logging.info("Langfuse environment variables found. Initializing Langfuse client.")
         langfuse_client = Langfuse()
-        # Extract details for a more descriptive trace name
-        n_examples = config.get('rag_prompt', {}).get('n_examples', 0)
-        source_data_path = Path(config.get('vector_db', {}).get('source_data_path', ''))
-
-        # Extract the parent directory name (e.g., 'train-5', 'train-100')
-        db_size_name = source_data_path.parent.parent.name if source_data_path else "unknown_db"
-
-        shot_type = f"{n_examples}-shot"
-
+        
+        n_examples_val = config.get('rag_prompt', {}).get('n_examples', 0)
+        effective_source_path = source_data_path or config.get('vector_db', {}).get('source_data_path', '')
+        source_data_path_obj = Path(effective_source_path)
+        db_size_name = source_data_path_obj.parent.parent.name if effective_source_path else "unknown_db"
+        shot_type = f"{n_examples_val}-shot"
         trace_name = f"RAG_{task} Prediction Run - {db_size_name} - {shot_type}"
-
         trace_metadata = {
             "db_size": db_size_name,
             "shot_type": shot_type,
-            "n_examples": n_examples,
+            "n_examples": n_examples_val,
             "config_path": config_path
         }
     else:
         logging.info("Langfuse environment variables not set. Proceeding without Langfuse tracing.")
 
+    # The new arguments are passed to run_predictions
+    run_args = {
+        "config_path": config_path,
+        "output_dir": run_output_dir,
+        "index_path": index_path,
+        "source_data_path": source_data_path,
+        "n_examples": n_examples
+    }
+
     if langfuse_client:
-        # Create a single trace that encompasses the entire script run
         with langfuse_client.start_as_current_span(name=trace_name, metadata=trace_metadata) as trace:
-            run_predictions(config_path, run_output_dir, trace)
-        # Ensure all buffered data is sent before the script exits
+            run_predictions(**run_args, trace=trace)
         langfuse_client.flush()
     else:
-        # Execute the main logic without a parent trace
-        run_predictions(config_path, run_output_dir, None)
+        run_predictions(**run_args, trace=None)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -453,5 +493,32 @@ if __name__ == '__main__':
         help='Path to an existing run directory to resume an interrupted prediction job.'
     )
     
+    parser.add_argument(
+        '--index-path',
+        type=str,
+        default=None,
+        help='Overrides the vector_db.index_path from the config file.'
+    )
+
+    parser.add_argument(
+        '--source-data-path',
+        type=str,
+        default=None,
+        help='Overrides the vector_db.source_data_path from the config file.'
+    )
+
+    parser.add_argument(
+        '--n-examples',
+        type=int,
+        default=None,
+        help='Overrides the rag_prompt.n_examples from the config file.'
+    )
+
     args = parser.parse_args()
-    main(args.config_path, args.resume_dir)
+    main(
+        config_path=args.config_path, 
+        resume_dir=args.resume_dir,
+        index_path=args.index_path,
+        source_data_path=args.source_data_path,
+        n_examples=args.n_examples
+    )

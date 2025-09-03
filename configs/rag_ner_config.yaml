@@ -11,7 +11,7 @@ test_file: "data/processed/test.jsonl"
 llm:
   # The active provider to be used by the factory.
   # This key determines which client implementation will be loaded.
-  # Supported options: "openai"
+  # Supported options: "openai", "ollama"
   provider: "openai"
 
   # --- Provider-Specific Configurations ---
