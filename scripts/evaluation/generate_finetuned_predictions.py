@@ -177,9 +177,7 @@ def run_prediction_and_save(config):
     task = config.get('task')
     if task not in ['ner', 're']:
         raise ValueError("Configuration file must specify a 'task': 'ner' or 're'.")
-        
-    if task == 're':
-        print(f"Note: This script is designed for NER entity decoding. The RE task for '{Path(config['model_path']).name}' will save raw integer predictions.")
+    
 
     model_path = config['model_path']
     test_file = config['test_file']
