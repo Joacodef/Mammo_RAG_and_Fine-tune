@@ -39,17 +39,17 @@ llm:
       # e.g., 1.5 means the next timeout will be 1.5x the previous one.
       backoff_factor: 1.5
 
-    # Settings for the Ollama client.
-    # These are used only when provider is set to "ollama".
-    ollama:
-      # The name of the model to use from your local Ollama server.
-      model: "llama2"
+  # Settings for the Ollama client.
+  # These are used only when provider is set to "ollama".
+  ollama:
+    # The name of the model to use from your local Ollama server.
+    model: "llama2"
 
-      # The base URL of your Ollama server.
-      base_url: "http://localhost:11434"
+    # The base URL of your Ollama server.
+    base_url: "http://localhost:11434"
 
-      # Optional parameters for the Ollama model.
-      llm_parameters: {}
+    # Optional parameters for the Ollama model.
+    llm_parameters: {}
 
 # --- Vector Database Configuration ---
 vector_db:
