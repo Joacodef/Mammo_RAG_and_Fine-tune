@@ -170,7 +170,7 @@ def _run_ner_prediction_loop(records_to_process, all_test_texts, results_file, r
             # Validate and Clean LLM Output
             validated_entities = []
             for entity in predicted_entities:
-                if isinstance(entity, dict) and entity.get("label") in valid_entity_labels:
+                if isinstance(entity, dict) and isinstance(entity.get("label"), str) and entity.get("label") in valid_entity_labels:
                     validated_entities.append(entity)
                 else:
                     logging.warning(f"Discarding invalid entity from LLM output: {entity}")
