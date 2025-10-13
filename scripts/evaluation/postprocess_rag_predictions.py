@@ -45,13 +45,59 @@ def find_nearest_match(substring, text, start_hint):
         return None, None
 
 
-def postprocess_predictions(input_path: str, output_path: str):
+def resolve_overlaps(entities: list) -> list:
     """
-    Reads a RAG prediction file, corrects the entity offsets, and saves the result.
+    Resolves overlaps between entities by keeping the longest one.
+
+    Args:
+        entities (list): A list of entity dictionaries.
+
+    Returns:
+        list: A new list of entities with overlaps resolved.
+    """
+    # Sort entities by start offset, and then by length (longest first)
+    entities = sorted(entities, key=lambda e: (e['start_offset'], -(e['end_offset'] - e['start_offset'])))
+    
+    resolved_entities = []
+    if not entities:
+        return resolved_entities
+
+    # Keep track of the last accepted entity
+    last_accepted_entity = entities[0]
+    
+    for i in range(1, len(entities)):
+        current_entity = entities[i]
+        
+        # Check for overlap: max(start1, start2) < min(end1, end2)
+        if current_entity['start_offset'] < last_accepted_entity['end_offset']:
+            # Overlap detected. The current entity is shorter because of the sorting.
+            # So, we discard it and keep the last_accepted_entity.
+            logging.warning(
+                f"Discarding overlapping entity: '{current_entity['text']}' "
+                f"({current_entity['start_offset']}-{current_entity['end_offset']}) "
+                f"in favor of '{last_accepted_entity['text']}' "
+                f"({last_accepted_entity['start_offset']}-{last_accepted_entity['end_offset']})."
+            )
+        else:
+            # No overlap, so we can add the last accepted entity to our results
+            resolved_entities.append(last_accepted_entity)
+            last_accepted_entity = current_entity
+
+    # Add the very last entity that was being compared
+    resolved_entities.append(last_accepted_entity)
+    
+    return resolved_entities
+
+
+def postprocess_predictions(input_path: str, output_path: str, allow_entity_overlap: bool):
+    """
+    Reads a RAG prediction file, corrects entity offsets, optionally resolves
+    overlaps, and saves the result.
 
     Args:
         input_path (str): Path to the .jsonl file with raw RAG predictions.
         output_path (str): Path to save the post-processed .jsonl file.
+        allow_entity_overlap (bool): If False, resolves overlaps by keeping the longest entity.
     """
     logging.info(f"Reading predictions from: {input_path}")
     with open(input_path, 'r', encoding='utf-8') as f:
@@ -61,6 +107,7 @@ def postprocess_predictions(input_path: str, output_path: str):
     total_entities = 0
     corrections_made = 0
     failed_corrections = 0
+    overlaps_removed = 0
 
     progress_bar = tqdm(records, desc="Post-processing predictions")
     for record in progress_bar:
@@ -88,13 +135,17 @@ def postprocess_predictions(input_path: str, output_path: str):
                 if new_start != original_start:
                     corrections_made += 1
             else:
-                # If no match is found, we could either drop the entity or keep the original.
-                # For this implementation, we will drop it as it indicates a hallucination.
                 failed_corrections += 1
                 logging.warning(
                     f"Could not find a match for entity text '{entity_text}' "
                     f"in source text. Dropping entity."
                 )
+        
+        # --- Overlap Resolution Step ---
+        if not allow_entity_overlap and corrected_entities:
+            original_count = len(corrected_entities)
+            corrected_entities = resolve_overlaps(corrected_entities)
+            overlaps_removed += original_count - len(corrected_entities)
 
         new_record = record.copy()
         new_record["predicted_entities"] = corrected_entities
@@ -111,6 +162,8 @@ def postprocess_predictions(input_path: str, output_path: str):
     logging.info(f"  - Total entities processed: {total_entities}")
     logging.info(f"  - Offsets corrected: {corrections_made}")
     logging.info(f"  - Entities dropped (no match found): {failed_corrections}")
+    if not allow_entity_overlap:
+        logging.info(f"  - Overlapping entities removed: {overlaps_removed}")
     logging.info(f"Corrected predictions saved to: {output_path}")
 
 
@@ -130,6 +183,11 @@ if __name__ == '__main__':
         required=True,
         help="Path to save the post-processed .jsonl file with corrected offsets."
     )
+    parser.add_argument(
+        '--allow-entity-overlap',
+        action='store_true',
+        help="If set, overlapping entities will not be removed."
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -138,4 +196,4 @@ if __name__ == '__main__':
         stream=sys.stdout
     )
 
-    postprocess_predictions(args.input_path, args.output_path)
+    postprocess_predictions(args.input_path, args.output_path, args.allow_entity_overlap)

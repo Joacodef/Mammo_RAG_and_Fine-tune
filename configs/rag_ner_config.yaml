@@ -80,6 +80,9 @@ rag_prompt:
   # to include in the few-shot prompt.
   n_examples: 3
 
+  # If set to false, overlapping entities will be resolved by keeping the longest one.
+  allow_entity_overlap: false
+
   # The list of entity labels to be extracted by the LLM.
   # Providing a clear name and description for each label is crucial for
   # guiding the model to make accurate and consistent extractions.

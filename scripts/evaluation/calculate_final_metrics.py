@@ -44,9 +44,19 @@ def calculate_ner_metrics(predictions: list) -> dict:
     entity_metrics = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0})
 
     for record in predictions:
-        # Convert true and predicted entities to sets of tuples for easy comparison
-        true_entities_set = {(e['text'].strip(), e['label']) for e in record['true_entities']}
-        predicted_entities_set = {(e['text'].strip(), e['label']) for e in record['predicted_entities']}
+        # --- Start of Change ---
+        # Safely create the sets, filtering out any malformed or incomplete entities.
+        true_entities_set = {
+            (e['text'].strip(), e['label'])
+            for e in record.get('true_entities', [])
+            if isinstance(e, dict) and e.get('text') and e.get('label')
+        }
+        predicted_entities_set = {
+            (e['text'].strip(), e['label'])
+            for e in record.get('predicted_entities', [])
+            if isinstance(e, dict) and e.get('text') and e.get('label')
+        }
+        # --- End of Change ---
 
         # Calculate True Positives, False Positives, and False Negatives for this record
         tp = true_entities_set.intersection(predicted_entities_set)
@@ -66,7 +76,13 @@ def calculate_ner_metrics(predictions: list) -> dict:
     all_tp, all_fp, all_fn = 0, 0, 0
     total_support = 0
 
-    sorted_labels = sorted(entity_metrics.keys())
+    # Handle cases where no entities were found or predicted at all
+    all_labels = set(entity_metrics.keys())
+    if 'true_entities' in predictions[0]:
+        all_labels.update({e['label'] for p in predictions for e in p.get('true_entities', []) if isinstance(e, dict) and e.get('label')})
+
+    sorted_labels = sorted(list(all_labels))
+
     for label in sorted_labels:
         tp = entity_metrics[label]['tp']
         fp = entity_metrics[label]['fp']
@@ -101,15 +117,22 @@ def calculate_ner_metrics(predictions: list) -> dict:
     }
     
     # Calculate weighted average (average weighted by support)
-    weighted_f1 = sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0
+    if total_support > 0:
+        weighted_precision = sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support
+        weighted_recall = sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support
+        weighted_f1 = sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support
+    else:
+        weighted_precision = weighted_recall = weighted_f1 = 0
+
     report['weighted avg'] = {
-        'precision': sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
-        'recall': sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'precision': weighted_precision,
+        'recall': weighted_recall,
         'f1-score': weighted_f1,
         'support': total_support
     }
 
     return report
+
 
 def calculate_re_metrics(predictions: list) -> dict:
     """
@@ -126,13 +149,19 @@ def calculate_re_metrics(predictions: list) -> dict:
     relation_metrics = defaultdict(lambda: {'tp': 0, 'fp': 0, 'fn': 0})
 
     for record in predictions:
-        # Convert relations to a set of tuples for comparison: (from_id, to_id, type)
+        # --- Start of Change ---
+        # Safely create the sets, filtering out any malformed relations.
         true_relations_set = {
-            (r['from_id'], r['to_id'], r['type']) for r in record['true_relations']
+            (r['from_id'], r['to_id'], r['type'])
+            for r in record.get('true_relations', [])
+            if isinstance(r, dict) and 'from_id' in r and 'to_id' in r and r.get('type')
         }
         predicted_relations_set = {
-            (r['from_id'], r['to_id'], r['type']) for r in record['predicted_relations']
+            (r['from_id'], r['to_id'], r['type'])
+            for r in record.get('predicted_relations', [])
+            if isinstance(r, dict) and 'from_id' in r and 'to_id' in r and r.get('type')
         }
+        # --- End of Change ---
 
         tp = true_relations_set.intersection(predicted_relations_set)
         fp = predicted_relations_set - true_relations_set
@@ -151,7 +180,12 @@ def calculate_re_metrics(predictions: list) -> dict:
     all_tp, all_fp, all_fn = 0, 0, 0
     total_support = 0
 
-    sorted_labels = sorted(relation_metrics.keys())
+    all_labels = set(relation_metrics.keys())
+    if 'true_relations' in predictions[0]:
+        all_labels.update({r['type'] for p in predictions for r in p.get('true_relations', []) if isinstance(r, dict) and r.get('type')})
+        
+    sorted_labels = sorted(list(all_labels))
+
     for label in sorted_labels:
         tp = relation_metrics[label]['tp']
         fp = relation_metrics[label]['fp']
@@ -186,10 +220,17 @@ def calculate_re_metrics(predictions: list) -> dict:
     }
 
     # Calculate weighted average
+    if total_support > 0:
+        weighted_precision = sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support
+        weighted_recall = sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support
+        weighted_f1 = sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support
+    else:
+        weighted_precision = weighted_recall = weighted_f1 = 0
+        
     report['weighted avg'] = {
-        'precision': sum(report[label]['precision'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
-        'recall': sum(report[label]['recall'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
-        'f1-score': sum(report[label]['f1-score'] * report[label]['support'] for label in sorted_labels) / total_support if total_support > 0 else 0,
+        'precision': weighted_precision,
+        'recall': weighted_recall,
+        'f1-score': weighted_f1,
         'support': total_support
     }
 

@@ -133,7 +133,7 @@ def test_postprocess_predictions_corrects_offsets(mock_open_func, sample_record_
     # and the write handle on the second call.
     mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
-    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
+    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl", allow_entity_overlap=True)
 
     # Verify the content written to the dedicated write handle
     written_data = mock_write_handle.write.call_args[0][0]
@@ -157,7 +157,7 @@ def test_postprocess_predictions_drops_unmatched_entities(mock_open_func, sample
     # Configure the 'open' mock to return the correct handle for each call
     mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
-    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
+    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl", allow_entity_overlap=True)
 
     # Verify the content written to the dedicated write handle
     written_data = mock_write_handle.write.call_args[0][0]
@@ -188,7 +188,7 @@ def test_postprocess_predictions_handles_malformed_entity(mock_open_func):
     mock_open_func.side_effect = [mock_read_handle, mock_write_handle]
 
     # The function should run without raising an error
-    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl")
+    postprocess_predictions("dummy_input.jsonl", "dummy_output.jsonl", allow_entity_overlap=True)
     
     # Verify the content written to the dedicated write handle
     written_data = mock_write_handle.write.call_args[0][0]

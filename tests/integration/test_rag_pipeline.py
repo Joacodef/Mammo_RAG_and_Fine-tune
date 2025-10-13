@@ -92,7 +92,7 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag_te
     This test mocks the external API call to OpenAI.
     """
     # --- 1. Setup Mocks ---
-    mock_api_response_entities = [{"text": "a finding", "label": "FIND"}]
+    mock_api_response_entities = [{"text": "a finding", "label": "FIND", "start_offset": 0}]
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public-key")
 
@@ -138,7 +138,14 @@ def test_rag_prediction_pipeline(mock_openai_client, mock_langfuse, setup_rag_te
     with open(prediction_file, 'r') as f:
         predictions = [json.loads(line) for line in f]
     assert len(predictions) == 1
-    assert predictions[0]['predicted_entities'] == mock_api_response_entities
+    # Define the expected entity after post-processing has corrected its offsets
+    expected_postprocessed_entity = [{
+        "text": "a finding",
+        "label": "FIND",
+        "start_offset": 27,
+        "end_offset": 36
+    }]
+    assert predictions[0]['predicted_entities'] == expected_postprocessed_entity
 
     # Assert that the langfuse client's flush method was called once
     mock_langfuse_instance.flush.assert_called_once()
@@ -185,14 +192,14 @@ def test_rag_prediction_resume_functionality(mock_openai_client, mock_langfuse, 
     completed_record = {
         "source_text": "First test report.",
         "true_entities": [],
-        "predicted_entities": [{"text": "first finding", "label": "FIND"}],
+        "predicted_entities": [{"text": "first finding", "label": "FIND", "start_offset": 0}],
         "prompt_used": "..."
     }
     with open(partial_predictions_file, 'w') as f:
         f.write(json.dumps(completed_record) + '\n')
 
     # --- 3. Setup Mocks ---
-    mock_api_response = [{"text": "some finding", "label": "FIND"}]
+    mock_api_response = [{"text": "some finding", "label": "FIND", "start_offset": 0}]
     mock_client_instance = MagicMock()
     mock_client_instance.get_ner_prediction.return_value = mock_api_response
     mock_openai_client.return_value = mock_client_instance

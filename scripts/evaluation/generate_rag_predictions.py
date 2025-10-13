@@ -10,6 +10,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from typing import Any, Optional
+import subprocess
+
 
 # Add the project root to the Python path to allow for absolute imports
 import sys
@@ -473,6 +475,43 @@ def main(
         langfuse_client.flush()
     else:
         run_predictions(**run_args, trace=None)
+
+    # --- Post-processing Step ---
+    # After generating raw predictions, run the post-processing script to
+    # correct entity offsets and handle overlaps based on the config.
+    if task == 'ner':
+        logging.info("\n--- Starting Post-processing of RAG Predictions ---")
+        raw_predictions_path = run_output_dir / "predictions.jsonl"
+        postprocessed_predictions_path = run_output_dir / "predictions_postprocessed.jsonl"
+        
+        # Read the 'allow_entity_overlap' setting from the configuration.
+        allow_overlap = config.get('rag_prompt', {}).get('allow_entity_overlap', True)
+
+        postprocess_cmd = [
+            sys.executable,
+            "scripts/evaluation/postprocess_rag_predictions.py",
+            "--input-path", str(raw_predictions_path),
+            "--output-path", str(postprocessed_predictions_path)
+        ]
+        
+        # Add the flag to the command only if overlap is explicitly allowed in the config.
+        if allow_overlap:
+            postprocess_cmd.append("--allow-entity-overlap")
+
+        try:
+            # Execute the post-processing script as a subprocess.
+            subprocess.run(postprocess_cmd, check=True, capture_output=True, text=True)
+            logging.info("Post-processing script finished successfully.")
+            
+            # Replace the original raw predictions with the corrected version.
+            os.replace(postprocessed_predictions_path, raw_predictions_path)
+            logging.info(f"Updated predictions file saved to: {raw_predictions_path}")
+
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Post-processing script failed with exit code {e.returncode}.")
+            logging.error(f"Stderr: {e.stderr}")
+        except FileNotFoundError:
+            logging.error("Could not find the 'postprocess_rag_predictions.py' script.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
