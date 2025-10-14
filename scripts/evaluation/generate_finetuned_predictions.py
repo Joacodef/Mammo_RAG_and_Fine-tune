@@ -89,7 +89,7 @@ def decode_entities_from_tokens(
                 start = current_entity_offsets[0][0]
                 end = current_entity_offsets[-1][1]
                 entity_text = source_text[start:end]
-                reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+                reconstructed_entities.append({"text": entity_text, "label": current_entity_label, "start_offset": start, "end_offset": end})
             
             # Start a new entity
             current_entity_offsets = [(start_char, end_char)]
@@ -104,7 +104,7 @@ def decode_entities_from_tokens(
                 start = current_entity_offsets[0][0]
                 end = current_entity_offsets[-1][1]
                 entity_text = source_text[start:end]
-                reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+                reconstructed_entities.append({"text": entity_text, "label": current_entity_label, "start_offset": start, "end_offset": end})
             current_entity_offsets = []
             current_entity_label = None
     
@@ -113,7 +113,7 @@ def decode_entities_from_tokens(
         start = current_entity_offsets[0][0]
         end = current_entity_offsets[-1][1]
         entity_text = source_text[start:end]
-        reconstructed_entities.append({"text": entity_text, "label": current_entity_label})
+        reconstructed_entities.append({"text": entity_text, "label": current_entity_label, "start_offset": start, "end_offset": end})
         
     return reconstructed_entities
 

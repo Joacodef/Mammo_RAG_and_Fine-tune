@@ -22,12 +22,12 @@ def mock_unified_predictions():
         {
             "source_text": "Nódulo en mama derecha.",
             "true_entities": [
-                {"text": "Nódulo", "label": "FIND"},
-                {"text": "mama derecha", "label": "REG"}
+                {"text": "Nódulo", "label": "FIND", "start_offset": 0, "end_offset": 6},
+                {"text": "mama derecha", "label": "REG", "start_offset": 10, "end_offset": 22}
             ],
             "predicted_entities": [
-                {"text": "Nódulo", "label": "FIND"},       # True Positive (FIND)
-                {"text": "mama izquierda", "label": "REG"}  # False Positive (REG)
+                {"text": "Nódulo", "label": "FIND", "start_offset": 0, "end_offset": 6},       # True Positive (FIND)
+                {"text": "mama izquierda", "label": "REG", "start_offset": 10, "end_offset": 23}  # False Positive (REG) - different boundaries
             ]
             # This setup also implies one FN for "mama derecha" (REG)
         },
@@ -35,7 +35,7 @@ def mock_unified_predictions():
             "source_text": "Sin hallazgos de jerarquía.",
             "true_entities": [], # No true entities in this record
             "predicted_entities": [
-                {"text": "hallazgos de jerarquía", "label": "FIND"} # False Positive (FIND)
+                {"text": "hallazgos de jerarquía", "label": "FIND", "start_offset": 4, "end_offset": 26} # False Positive (FIND)
             ]
         }
     ]
@@ -93,8 +93,8 @@ def test_calculate_ner_metrics_perfect_match():
     """
     predictions = [
         {
-            "true_entities": [{"text": "nodule", "label": "FIND"}],
-            "predicted_entities": [{"text": "nodule", "label": "FIND"}]
+            "true_entities": [{"text": "nodule", "label": "FIND", "start_offset": 0, "end_offset": 6}],
+            "predicted_entities": [{"text": "nodule", "label": "FIND", "start_offset": 0, "end_offset": 6}]
         }
     ]
     report = calculate_ner_metrics(predictions)
@@ -109,8 +109,8 @@ def test_calculate_ner_metrics_no_match():
     """
     predictions = [
         {
-            "true_entities": [{"text": "nodule", "label": "FIND"}],
-            "predicted_entities": [{"text": "mass", "label": "FIND"}]
+            "true_entities": [{"text": "nodule", "label": "FIND", "start_offset": 0, "end_offset": 6}],
+            "predicted_entities": [{"text": "nodule", "label": "FIND", "start_offset": 10, "end_offset": 16}] # Different offsets
         }
     ]
     report = calculate_ner_metrics(predictions)

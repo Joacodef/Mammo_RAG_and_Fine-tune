@@ -68,18 +68,18 @@ def calculate_ner_metrics(predictions: list, valid_labels: set = None) -> dict:
         predicted_entities = [e for e in record.get('predicted_entities', []) if valid_labels is None or e.get('label') in valid_labels]
         # --- End of filtering logic ---
 
-        true_entities_set = {(e['text'].strip(), e['label']) for e in true_entities if isinstance(e, dict) and e.get('text') and e.get('label')}
-        predicted_entities_set = {(e['text'].strip(), e['label']) for e in predicted_entities if isinstance(e, dict) and e.get('text') and e.get('label')}
+        true_entities_set = {(e['start_offset'], e['end_offset'], e['label']) for e in true_entities if isinstance(e, dict) and 'start_offset' in e and 'end_offset' in e and 'label' in e}
+        predicted_entities_set = {(e['start_offset'], e['end_offset'], e['label']) for e in predicted_entities if isinstance(e, dict) and 'start_offset' in e and 'end_offset' in e and 'label' in e}
         
         tp = true_entities_set.intersection(predicted_entities_set)
         fp = predicted_entities_set - true_entities_set
         fn = true_entities_set - predicted_entities_set
 
-        for _, label in tp:
+        for _, _, label in tp:
             entity_metrics[label]['tp'] += 1
-        for _, label in fp:
+        for _, _, label in fp:
             entity_metrics[label]['fp'] += 1
-        for _, label in fn:
+        for _, _, label in fn:
             entity_metrics[label]['fn'] += 1
 
     # --- The rest of the function remains the same for calculating the report ---

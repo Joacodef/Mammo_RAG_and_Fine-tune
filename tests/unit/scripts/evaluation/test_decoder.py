@@ -55,7 +55,7 @@ def test_decode_simple_entity(tokenizer, label_maps):
     
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
-    assert result == [{"text": "nodule", "label": "FIND"}]
+    assert result == [{"text": "nodule", "label": "FIND", "start_offset": 11, "end_offset": 17}]
 
 def test_decode_no_entities(tokenizer, label_maps):
     """Tests that a sequence of all 'O' labels returns an empty list."""
@@ -85,7 +85,7 @@ def test_decode_multi_token_entity(tokenizer, label_maps):
     
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
-    assert result == [{"text": "left breast", "label": "LOC"}]
+    assert result == [{"text": "left breast", "label": "LOC", "start_offset": 14, "end_offset": 25}]
 
 def test_decode_subword_entity(tokenizer, label_maps):
     """Tests decoding an entity that is split into subword tokens."""
@@ -105,7 +105,7 @@ def test_decode_subword_entity(tokenizer, label_maps):
         
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
-    assert result == [{"text": "microcalcifications", "label": "FIND"}]
+    assert result == [{"text": "microcalcifications", "label": "FIND", "start_offset": 11, "end_offset": 30}]
 
 def test_decode_multiple_disjoint_entities(tokenizer, label_maps):
     """Tests decoding multiple separate entities in the same text."""
@@ -131,8 +131,8 @@ def test_decode_multiple_disjoint_entities(tokenizer, label_maps):
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
     assert len(result) == 2
-    assert {"text": "nodule", "label": "FIND"} in result
-    assert {"text": "mass", "label": "FIND"} in result
+    assert {"text": "nodule", "label": "FIND", "start_offset": 2, "end_offset": 8} in result
+    assert {"text": "mass", "label": "FIND", "start_offset": 15, "end_offset": 19} in result
 
 def test_decode_consecutive_entities(tokenizer, label_maps):
     """Tests decoding two different entities that are right next to each other."""
@@ -154,8 +154,8 @@ def test_decode_consecutive_entities(tokenizer, label_maps):
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
     assert len(result) == 2
-    assert {"text": "dense", "label": "LOC"} in result
-    assert {"text": "finding", "label": "FIND"} in result
+    assert {"text": "dense", "label": "LOC", "start_offset": 2, "end_offset": 7} in result
+    assert {"text": "finding", "label": "FIND", "start_offset": 8, "end_offset": 15} in result
 
 def test_decode_handles_invalid_i_tag(tokenizer, label_maps):
     """Tests that an I-tag not following a B-tag or I-tag of the same type is ignored."""
@@ -178,7 +178,7 @@ def test_decode_handles_invalid_i_tag(tokenizer, label_maps):
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
 
     # Only the valid 'left' entity should be decoded
-    assert result == [{"text": "left", "label": "LOC"}]
+    assert result == [{"text": "left", "label": "LOC", "start_offset": 4, "end_offset": 8}]
 
 def test_decode_entity_at_end_of_text(tokenizer, label_maps):
     """Tests that an entity right at the end of the input is correctly captured."""
@@ -198,4 +198,4 @@ def test_decode_entity_at_end_of_text(tokenizer, label_maps):
     
     result = decode_entities_from_tokens(text, predictions, inv_label_map, tokenizer)
     
-    assert result == [{"text": "nodule", "label": "FIND"}]
+    assert result == [{"text": "nodule", "label": "FIND", "start_offset": 9, "end_offset": 15}]

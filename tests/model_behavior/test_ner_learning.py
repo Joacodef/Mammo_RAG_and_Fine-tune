@@ -108,8 +108,14 @@ def test_ner_model_can_overfit_on_small_batch(tmp_path):
         )
         
         # In this test, true entities are decoded directly from the source for simplicity
+        # In this test, true entities are decoded directly from the source for simplicity
         true_entities = [
-            {"text": record["text"][e["start_offset"]:e["end_offset"]], "label": e["label"]} 
+            {
+                "text": record["text"][e["start_offset"]:e["end_offset"]],
+                "label": e["label"],
+                "start_offset": e["start_offset"],
+                "end_offset": e["end_offset"]
+            }
             for e in record["entities"]
         ]
 
