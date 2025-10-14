@@ -192,15 +192,12 @@ def calculate_ner_metrics_relaxed(predictions: list, label_groups: dict, overlap
     report = {}
     all_tp, all_fp, all_fn, total_support = 0, 0, 0, 0
     
-    # --- Start of new logic: Determine the labels to show in the final report ---
     if valid_labels is not None:
-        # Get labels from the config that are NOT part of any group
-        labels_not_in_groups = valid_labels - set(label_to_group.keys())
-        # The final report will show group names and any ungrouped valid labels
-        report_labels = set(label_groups.keys()).union(labels_not_in_groups)
+        # If a filter is provided, the report should only contain those labels.
+        report_labels = valid_labels
     else:
+        # Otherwise, report on all labels and groups for which metrics were calculated.
         report_labels = set(entity_metrics.keys())
-    # --- End of new logic ---
     
     sorted_labels = sorted(list(report_labels))
 
@@ -267,11 +264,12 @@ def calculate_re_metrics(predictions: list, valid_labels: set = None) -> dict:
     all_tp, all_fp, all_fn = 0, 0, 0
     total_support = 0
 
-    all_labels = set(relation_metrics.keys())
-    if 'true_relations' in predictions[0]:
-        all_labels.update({r['type'] for p in predictions for r in p.get('true_relations', []) if isinstance(r, dict) and r.get('type')})
-        
-    sorted_labels = sorted(list(all_labels))
+    all_labels_in_data = set(relation_metrics.keys())
+    if predictions and 'true_relations' in predictions[0]:
+        all_labels_in_data.update({r['type'] for p in predictions for r in p.get('true_relations', []) if isinstance(r, dict) and r.get('type')})
+    
+    # Use valid_labels for the report if provided, otherwise use all labels found
+    sorted_labels = sorted(list(valid_labels if valid_labels is not None else all_labels_in_data))
 
     for label in sorted_labels:
         tp = relation_metrics[label]['tp']
