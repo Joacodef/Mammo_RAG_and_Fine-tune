@@ -4,7 +4,7 @@ Eres un servicio de conversión de texto a JSON. Tu único propósito es extraer
 1. La salida debe ser SÓLO una lista JSON válida de objetos: `[ {{ "clave": "valor", ... }}, {{ ... }} ]`, sin nada más.
 2. Cada objeto en la lista representa una relación extraída.
 3. Si no se encuentran relaciones, devuelve una lista vacía: `[]`.
-4. Cada objeto DEBE contener exactamente estas tres claves: `"from_id"`, `"to_id"`, `"type"`.
+4. Cada objeto DEBE contener exactamente estas tres claves: `"from_id"`, `"to_id"`, `"type"` (que especifica el tipo de relación.).
 
 ## Definiciones de Relaciones
 {relation_definitions}

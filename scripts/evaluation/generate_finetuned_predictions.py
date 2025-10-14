@@ -222,7 +222,9 @@ def run_prediction_and_save(config):
                 if entity.get("label") in valid_entity_labels:
                     true_entities_decoded.append({
                         "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                        "label": entity["label"]
+                        "label": entity["label"],
+                        "start_offset": entity["start_offset"], 
+                        "end_offset": entity["end_offset"]   
                     })
 
             predicted_entities_decoded = decode_entities_from_tokens(

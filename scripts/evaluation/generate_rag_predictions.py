@@ -183,7 +183,9 @@ def _run_ner_prediction_loop(records_to_process, all_test_texts, results_file, r
                 if entity.get("label") in valid_entity_labels:
                     true_entities_decoded.append({
                         "text": record["text"][entity["start_offset"]:entity["end_offset"]],
-                        "label": entity["label"]
+                        "label": entity["label"],
+                        "start_offset": entity["start_offset"],
+                        "end_offset": entity["end_offset"]     
                     })
 
             # Format and write the result immediately
