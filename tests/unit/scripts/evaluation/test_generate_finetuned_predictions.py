@@ -95,7 +95,12 @@ def test_ner_workflow(
     
     expected_output = {
         "source_text": "Sample text.",
-        "true_entities": [{"text": "Sample", "label": "FIND"}],
+        "true_entities": [{
+            "text": "Sample", 
+            "label": "FIND", 
+            "start_offset": 0, 
+            "end_offset": 6
+        }],
         "predicted_entities": mock_decoded_entities
     }
     assert json.loads(written_data) == expected_output
