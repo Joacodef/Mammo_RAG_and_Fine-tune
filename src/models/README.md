@@ -37,3 +37,13 @@ The `REModel` class is a wrapper for the `AutoModelForSequenceClassification` mo
 -   **Dual-Mode Initialization**:
     -   **Training**: When `n_labels` and a `tokenizer` are provided, it initializes a base model with a new classification head and adjusts embeddings.
     -   **Evaluation**: When `n_labels` is `None`, it loads a fine-tuned RE model directly from a path.
+
+---
+
+## Implementation notes
+
+- `save_pretrained`: Both `BertNerModel` and `REModel` expose a `save_pretrained(output_dir)` method that delegates to the underlying Hugging Face model's `save_pretrained`. This is what the training pipeline uses to persist checkpoints.
+
+- RE tokenizer requirement: When initializing `REModel` for training (i.e., with `n_labels` provided), a valid `tokenizer` must be passed to the constructor so that the model can resize its token embeddings for the special entity marker tokens (the constructor raises a `ValueError` if `tokenizer` is missing).
+
+- Forward outputs: Both model wrappers return the Hugging Face model's output objects (`TokenClassifierOutput` for NER, `SequenceClassifierOutput` for RE). These objects contain `.logits` and, when `labels` are provided, `.loss` as well. The rest of the training/evaluation code expects this standard interface.

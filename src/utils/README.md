@@ -19,3 +19,9 @@ The `CostTracker` class is a utility designed to monitor and estimate the financ
 -   **Summary and Reporting**: At the end of a prediction run, the `save_log` method can be called to generate two outputs:
     1.  A summary of the total requests, total tokens, and total estimated cost is printed to the console.
     2.  A detailed, timestamped `.csv` file is saved to the `output/logs` directory, containing a record of every API call made during the session for more granular analysis.
+
+### Implementation notes
+
+- Pricing units: prices in `CostTracker.model_prices` are expressed as USD per 1,000,000 tokens (input/output). The calculated per-request cost scales prompt/completion tokens accordingly.
+- Unknown models: if a model name is not present in `model_prices`, the tracker will warn and treat the cost as $0 for that request.
+- CSV output: `save_log()` writes a timestamped CSV (e.g., `cost_log_YYYYMMDD_HHMMSS.csv`) into `output/logs` and prints a human-readable summary to stdout. If no requests were logged, `save_log()` prints a message and does nothing.

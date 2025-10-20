@@ -108,3 +108,23 @@ To understand how the special tokens are used, consider the following record:
     * Marked Text for Model: `[E1_START]Nódulo[E1_END] en [E2_START]mama derecha[E2_END].`
 
 This new, marked string is then passed to the tokenizer. The model learns to use the `[E1_START]...[E2_END]` markers to understand which pair of entities it should classify for the `ubicar` relationship.
+
+---
+
+## Implementation notes and configuration caveats
+
+- RE "No_Relation" behavior: the `REDataset` defaults to assigning the string `"No_Relation"` to pairs that are not present in the `relations` list of a record. However, the dataset will only include instances whose `relation_type` is present in `config['model']['relation_labels']`. That means you must include `"No_Relation"` in `model.relation_labels` if you want negative (no-relation) examples to be part of the training data; otherwise those pairs will be skipped.
+
+- Required config keys:
+  - NER: provide `model.base_model` (or `model_path`) and, preferably, `model.entity_labels` (list of entity names).
+  - RE: provide `model.base_model` (or `model_path`) and `model.relation_labels` (list of relation names). The RE datamodule raises an error if no model path is found.
+
+- NER label fallback: `NERDataModule` looks for `config['model']['entity_labels']` to construct the BIO label map. If that key is missing a fallback list (for example `['FIND','REG','OBS','GANGLIOS']`) will be used — it's recommended to explicitly set `model.entity_labels` in your config to match your dataset.
+
+- Batch size configuration:
+  - Training batch size is read from `trainer.batch_size` in the config (default 8).
+  - Test/evaluation batch size is read from the top-level `batch_size` key in the config (default 16).
+
+- Tokenizers and special tokens:
+  - Special tokens are detected using the tokenizer `offset_mapping` (tokens with offsets `(0, 0)` are treated as special) and are assigned label `-100` for NER so they're ignored by the loss function. The concrete special token names (e.g., `[CLS]`, `[SEP]`) depend on the chosen tokenizer.
+  - The RE datamodule adds additional special tokens (`[E1_START]`, `[E1_END]`, `[E2_START]`, `[E2_END]`) to the tokenizer via `tokenizer.add_special_tokens` so those markers are recognized during tokenization.

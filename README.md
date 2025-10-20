@@ -30,11 +30,12 @@ The repository is organized to maintain a clear separation between configuration
 │   └── python-tests.yml
 ├── configs/                  # Experiment configuration files
 │   ├── data_preparation_config.yaml
-│   ├── rag_config.yaml
+│   ├── rag_ner_config.yaml
+│   ├── rag_re_config.yaml
 │   ├── training_ner_config.yaml
 │   ├── training_re_config.yaml
-│   ├── evaluation_ner_config.yaml
-│   └── evaluation_re_config.yaml
+│   ├── inference_ner_config.yaml
+│   └── inference_re_config.yaml
 ├── data/                     # (Git-ignored) Raw and processed data
 │   ├── raw/                  # Place raw all.jsonl here
 │   └── processed/
@@ -44,8 +45,11 @@ The repository is organized to maintain a clear separation between configuration
 │           │   └── train.jsonl
 │           └── ...
 ├── output/                   # (Git-ignored) Models, logs, evaluation results, etc.
-├── prompts/                  # Prompt templates for the RAG pipeline
-│   └── ner_rag_prompt.txt
+├── prompts/                  # Prompt templates for the RAG pipeline (Spanish templates available)
+│   ├── rag_ner_prompt_spanish.txt
+│   ├── rag_ner_prompt_spanish_strict.txt
+│   ├── rag_re_prompt_spanish.txt
+│   └── rag_re_prompt_spanish_strict.txt
 ├── scripts/                  # High-level scripts to run experiments
 │   ├── data/
 │   │   ├── generate_partitions.py
@@ -125,9 +129,11 @@ First, prepare the datasets for both fine-tuning and RAG.
     ```
   - **1.2. Build Vector Database (for RAG)**
     This step creates the FAISS index from the full training set, which is required for the RAG pipeline.
+    Use the task-specific RAG config (NER or RE). Example for NER:
     ```bash
-    python scripts/data/build_vector_db.py --config-path configs/rag_config.yaml
+    python scripts/data/build_vector_db.py --config-path configs/rag_ner_config.yaml
     ```
+    For RE, use `configs/rag_re_config.yaml`.
 
 ### 2\. Model Training and Prediction
 
@@ -146,20 +152,24 @@ First, prepare the datasets for both fine-tuning and RAG.
           --partition-dir data/processed/train-50
         ```
   - **2.2. Generate Predictions with RAG**
-    Run the RAG pipeline on the test set to generate NER predictions.
-    ```bash
-    python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_config.yaml
-    ```
+  Run the RAG pipeline on the test set to generate predictions. Use the appropriate RAG config for your task.
+  ```bash
+  # NER example
+  python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_ner_config.yaml
+
+  # RE example
+  python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_re_config.yaml
+  ```
 
 ### 3\. Evaluation
 
 The evaluation is a two-step process: generate raw prediction files, then calculate metrics.
 
   - **3.1. Generate Predictions for Fine-Tuned Models**
-    Run inference on the test set for all trained model samples in a directory.
-    ```bash
-    python scripts/evaluation/generate_finetuned_predictions.py --config-path configs/evaluation_ner_config.yaml
-    ```
+  Run inference on the test set for all trained model samples in a directory. Use the `inference_*.yaml` configs.
+  ```bash
+  python scripts/evaluation/generate_finetuned_predictions.py --config-path configs/inference_ner_config.yaml --model-dir output/models/ner/<run_folder>
+  ```
   - **3.2. Calculate Final Metrics**
     Calculate metrics from the generated prediction files.
       - **For a fine-tuned model:**
@@ -167,16 +177,18 @@ The evaluation is a two-step process: generate raw prediction files, then calcul
         python scripts/evaluation/calculate_final_metrics.py \
           --prediction-path <path_to_finetuned_predictions.jsonl> \
           --type ner \
-          --config-path configs/evaluation_ner_config.yaml \
+          --config-path configs/inference_ner_config.yaml \
           --output-path <path_to_save_final_metrics.json>
         ```
       - **For RAG predictions:**
         ```bash
         python scripts/evaluation/calculate_final_metrics.py \
           --prediction-path <path_to_rag_predictions.jsonl> \
-          --type rag \
+          --type ner \
+          --config-path configs/rag_ner_config.yaml \
           --output-path <path_to_save_final_metrics.json>
         ```
+        (For RE replace `--type ner` and the config with the RE equivalents.)
 
 -----
 
