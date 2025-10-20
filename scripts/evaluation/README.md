@@ -30,11 +30,11 @@ This script runs inference for fine-tuned **NER** and **RE** models on the test 
 
 ### Usage
 
-The script is driven by a YAML configuration file (`configs/evaluation_ner_config.yaml` or `configs/evaluation_re_config.yaml`) which specifies the model directory, test data, and other parameters.
+The script is driven by a YAML configuration file. For fine-tuned models use `configs/inference_ner_config.yaml` or `configs/inference_re_config.yaml`; these configs specify the model directory, test data, and other parameters. The script also requires a `--model-dir` pointing to the training run folder containing `sample-*` subfolders.
 
 ```bash
-python scripts/evaluation/generate_finetuned_predictions.py \
-  --config-path configs/evaluation_ner_config.yaml
+# Example (NER): run inference for all samples in a training run
+python scripts/evaluation/generate_finetuned_predictions.py --config-path configs/inference_ner_config.yaml --model-dir output/models/ner/<run_folder>
 ```
 
 -----
@@ -47,11 +47,14 @@ This script runs the full end-to-end RAG pipeline to generate NER predictions fo
 
 ### Usage
 
-The script is configured using `configs/rag_config.yaml`.
+The script is configured using a task-specific RAG YAML (e.g. `configs/rag_ner_config.yaml` or `configs/rag_re_config.yaml`). `generate_rag_predictions.py` also supports optional command-line overrides to temporarily replace values in the YAML: `--index-path`, `--source-data-path`, and `--n-examples`.
 
 ```bash
-python scripts/evaluation/generate_rag_predictions.py \
-  --config-path configs/rag_config.yaml
+# NER example
+python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_ner_config.yaml
+
+# With overrides (useful for debugging or small runs)
+python scripts/evaluation/generate_rag_predictions.py --config-path configs/rag_ner_config.yaml --index-path output/vector_db/faiss_index.bin --source-data-path data/processed/train-all/sample-1/train.jsonl --n-examples 3
 ```
 
 -----
@@ -64,7 +67,7 @@ This script takes a raw prediction file (or a directory of prediction files) and
 
 ### Usage
 
-You must specify the type of task evaluation (`ner`, `rag`, or `re`) and provide either a path to a single prediction file or a directory. Note that the `--config-path` argument is only required for the `re` (Relation Extraction) task type.
+You must specify the type of task evaluation (`ner` or `re`) and provide either a path to a single prediction file or a directory. The `--config-path` argument is optional and can be used to provide label filtering or task-specific settings (for example, to load `model.relation_labels` when calculating RE metrics).
 
   * **To calculate metrics for a single fine-tuned NER model's predictions:**
 

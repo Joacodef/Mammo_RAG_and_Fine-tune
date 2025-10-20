@@ -98,9 +98,9 @@ This script is responsible for creating the **FAISS vector database**, which is 
 
 1.  **Generate Source Data**: Before building the database, you must first run `generate_partitions.py`. The vector database is built using the full training set, which is typically located at `data/processed/train-all/sample-1/train.jsonl`.
 
-2.  **Configure the Database**: The script's behavior is controlled by `configs/rag_config.yaml`. Ensure the `vector_db` section correctly points to the source data file and specifies where the final index should be saved.
+2.  **Configure the Database**: The script's behavior is controlled by the RAG config files. Use the task-specific RAG config for NER or RE (`configs/rag_ner_config.yaml` or `configs/rag_re_config.yaml`). Ensure the `vector_db` section correctly points to the source data file and specifies where the final index should be saved.
 
-    **Example `configs/rag_config.yaml`:**
+    **Example `configs/rag_ner_config.yaml`:**
 
     ```yaml
     vector_db:
@@ -114,10 +114,14 @@ This script is responsible for creating the **FAISS vector database**, which is 
       embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
     ```
 
-3.  **Execute the Script**: Run the script from the **root directory** of the project. You can optionally use the `--force-rebuild` flag to create a new index even if one already exists.
+3.  **Execute the Script**: Run the script from the **root directory** of the project. You can optionally use the `--force-rebuild` flag to create a new index even if one already exists. You can also override the `source_data_path` and `index_path` values from the command line.
 
-    ```bash
-    python scripts/data/build_vector_db.py --config-path configs/rag_config.yaml
-    ```
+  ```bash
+  # NER example
+  python scripts/data/build_vector_db.py --config-path configs/rag_ner_config.yaml --force-rebuild
+
+  # With overrides
+  python scripts/data/build_vector_db.py --config-path configs/rag_ner_config.yaml --source-data-path data/processed/train-all/sample-1/train.jsonl --index-path output/vector_db/faiss_index.bin
+  ```
 
 4.  **Review the Output**: The script will create and save the FAISS index file at the `index_path` specified in the configuration. The console will show logs detailing the process, including the number of vectors added to the index.
