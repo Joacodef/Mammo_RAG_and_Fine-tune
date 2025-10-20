@@ -20,7 +20,7 @@ run_all_metrics.py
 compile_rag_results.py
 compile_finetuned_results.py
 rag_results_summary*.csv
-finetuned_results_summary.csv
+finetuned_results_summary*.csv
 plot_results.py
 
 scripts_extra
