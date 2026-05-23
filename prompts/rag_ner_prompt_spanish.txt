@@ -11,6 +11,8 @@ Tu respuesta debe ser una lista con objetos JSON por cada entidad. Cada objeto d
 - end_offset : posición del carácter final de la entidad
 - text : texto completo de la entidad
 
+Responde ÚNICAMENTE con la lista JSON correspondiente al Texto final. No repitas los ejemplos ni agregues texto introductorio ni explicaciones. Comienza tu respuesta directamente con el carácter '[' y termínala con ']'.
+
 Ejemplos de informes:
 
 {examples}

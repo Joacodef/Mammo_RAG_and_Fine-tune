@@ -40,6 +40,10 @@ class Trainer:
         total_steps = len(train_dataloader) * self.config['trainer']['n_epochs']
         scheduler = self._create_scheduler(optimizer, total_steps)
 
+        # Initialize GradScaler if device is CUDA
+        use_amp = self.device.type == 'cuda'
+        scaler = torch.cuda.amp.GradScaler() if use_amp else None
+
         print("Starting training...")
         for epoch in range(self.config['trainer']['n_epochs']):
             print(f"\n--- Epoch {epoch + 1}/{self.config['trainer']['n_epochs']} ---")
@@ -60,19 +64,36 @@ class Trainer:
                 labels = batch[label_key].to(self.device)
 
                 # Forward pass
-                outputs = self.model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    labels=labels
-                )
+                if use_amp:
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=labels
+                        )
+                        loss = outputs.loss
+                else:
+                    outputs = self.model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels
+                    )
+                    loss = outputs.loss
                 
-                loss = outputs.loss
                 total_loss += loss.item()
 
                 # Backward pass
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                optimizer.step()
+                if use_amp:
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    optimizer.step()
+                
                 scheduler.step()
 
                 # Update progress bar

@@ -15,7 +15,7 @@ from src.data_loader.ner_datamodule import NERDataModule
 from src.models.ner_bert import BertNerModel
 from src.training.trainer import Trainer
 
-def run_batch_training(config_path, partition_dir):
+def run_batch_training(config_path, partition_dir, train_file_name="train.jsonl"):
     """
     Main function to run the training process for all samples in a partition directory.
 
@@ -23,6 +23,7 @@ def run_batch_training(config_path, partition_dir):
         config_path (str): Path to the main training YAML configuration file.
         partition_dir (str): Path to the directory containing training samples
                              (e.g., 'data/processed/train-50').
+        train_file_name (str): Name of the training file within each sample directory.
     """
     # --- 1. Load Configuration and Find Samples ---
     with open(config_path, 'r') as f:
@@ -54,7 +55,7 @@ def run_batch_training(config_path, partition_dir):
 
     # --- 3. Loop Through Each Sample and Train a Model ---
     for sample_dir in sample_dirs:
-        train_file_path = sample_dir / "train.jsonl"
+        train_file_path = sample_dir / train_file_name
         if not train_file_path.exists():
             print(f"  - Skipping {sample_dir.name}: 'train.jsonl' not found.")
             continue
@@ -129,6 +130,13 @@ if __name__ == '__main__':
         help="Path to the directory containing the training samples (e.g., 'data/processed/train-50')."
     )
     
+    parser.add_argument(
+        '--train-file-name',
+        type=str,
+        default='train.jsonl',
+        help="Name of the training file within each sample directory (e.g., 'train_noisy_light.jsonl')."
+    )
+    
     args = parser.parse_args()
     
-    run_batch_training(args.config_path, args.partition_dir)
+    run_batch_training(args.config_path, args.partition_dir, args.train_file_name)

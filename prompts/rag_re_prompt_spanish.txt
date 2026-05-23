@@ -11,6 +11,8 @@ Cada objeto JSON de relación debe tener exactamente 3 llaves:
 - "to_id": el id de la entidad de destino de la relación.
 - "type": el tipo de relación, que debe ser uno de los tipos definidos anteriormente.
 
+Responde ÚNICAMENTE con la lista JSON correspondiente al Texto final. No repitas los ejemplos ni agregues texto introductorio ni explicaciones. Comienza tu respuesta directamente con el carácter '[' y termínala con ']'.
+
 A continuación se muestran algunos ejemplos:
 ---
 {examples}

@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from openai import OpenAI, APIError, APITimeoutError
 from typing import List, Dict, Any, Optional
 
@@ -78,11 +79,10 @@ class OpenAIClient(BaseLLMClient):
                                 {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
                                 {"role": "user", "content": prompt}
                             ],
-                            response_format={"type": "json_object"},
                             timeout=current_timeout
                         )
                         response_content = response.choices[0].message.content
-                        generation.update(output=response_content, usage=response.usage)
+                        generation.update(output={"raw_output": response_content}, usage=response.usage)
                 else:
                     response = self.client.chat.completions.create(
                         model=self.model,
@@ -91,17 +91,29 @@ class OpenAIClient(BaseLLMClient):
                             {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        response_format={"type": "json_object"},
                         timeout=current_timeout
                     )
                     response_content = response.choices[0].message.content
 
-                response_dict = json.loads(response_content)
-                
-                for value in response_dict.values():
-                    if isinstance(value, list):
-                        return value
-                
+                # Use regex to find a JSON list or object within the response text
+                json_match = re.search(r'\[.*?\]|\{.*?\}', response_content, re.DOTALL)
+                if not json_match:
+                    raise json.JSONDecodeError("No JSON array or object found in the model's response.", response_content, 0)
+
+                json_string = json_match.group(0)
+                parsed_response = json.loads(json_string)
+
+                if generation:
+                    generation.update(output=parsed_response)
+
+                if isinstance(parsed_response, list):
+                    return parsed_response
+
+                if isinstance(parsed_response, dict):
+                    for value in parsed_response.values():
+                        if isinstance(value, list):
+                            return value
+
                 return [] # Return empty if JSON is valid but doesn't contain a list
 
             except APITimeoutError:
@@ -170,11 +182,10 @@ class OpenAIClient(BaseLLMClient):
                                 {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
                                 {"role": "user", "content": prompt}
                             ],
-                            response_format={"type": "json_object"},
                             timeout=current_timeout
                         )
                         response_content = response.choices[0].message.content
-                        generation.update(output=response_content, usage=response.usage)
+                        generation.update(output={"raw_output": response_content}, usage=response.usage)
                 else:
                     response = self.client.chat.completions.create(
                         model=self.model,
@@ -183,17 +194,29 @@ class OpenAIClient(BaseLLMClient):
                             {"role": "system", "content": "You are a helpful assistant designed to return JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        response_format={"type": "json_object"},
                         timeout=current_timeout
                     )
                     response_content = response.choices[0].message.content
 
-                response_dict = json.loads(response_content)
-                
-                for value in response_dict.values():
-                    if isinstance(value, list):
-                        return value
-                
+                # Use regex to find a JSON list or object within the response text
+                json_match = re.search(r'\[.*?\]|\{.*?\}', response_content, re.DOTALL)
+                if not json_match:
+                    raise json.JSONDecodeError("No JSON array or object found in the model's response.", response_content, 0)
+
+                json_string = json_match.group(0)
+                parsed_response = json.loads(json_string)
+
+                if generation:
+                    generation.update(output=parsed_response)
+
+                if isinstance(parsed_response, list):
+                    return parsed_response
+
+                if isinstance(parsed_response, dict):
+                    for value in parsed_response.values():
+                        if isinstance(value, list):
+                            return value
+
                 return []
 
             except APITimeoutError:
