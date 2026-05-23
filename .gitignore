@@ -27,3 +27,6 @@ scripts_extra
 
 .context
 experiments
+.venv/
+.pytest_cache/
+pytest_cache/
